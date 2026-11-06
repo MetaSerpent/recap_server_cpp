@@ -30,8 +30,9 @@ A passing isolated test or C++ server build does not prove a playable game.
 
 1. Capture sanitized RakNet packets for each ability and verify cooldown,
    confirmation and error response formats against the original client.
-2. Investigate the current squad-ability handler, which emits a hardcoded
-   director completion state; replace with measured authentic behavior.
+2. The squad-ability handler now executes the Lua ability instead of
+   faking a boss completion event. Verify the acknowledgement, cooldown and
+   rank semantics against real client captures before calling it complete.
 3. Verify damage, target deaths, AI scheduling, objective transitions.
 4. Reconstruct loot drops, inventory updates, persistence and mission rewards.
 5. Add version-specific client compatibility tests using independently held

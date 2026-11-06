@@ -14,3 +14,5 @@ jobs:
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/ability_selection_test.cpp -o /tmp/ability_selection_test
       - name: Run isolated gameplay tests
         run: /tmp/ability_selection_test
+      - name: Check squad-skill dispatch contract
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v

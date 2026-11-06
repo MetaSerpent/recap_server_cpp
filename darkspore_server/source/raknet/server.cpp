@@ -9,6 +9,7 @@
 #include "utils/functions.h"
 
 #include "game/instance.h"
+#include "game/lua.h"
 #include "game/objectmanager.h"
 #include "game/serverevent.h"
 #include "game/catalyst.h"
@@ -786,57 +787,39 @@ namespace RakNet {
 			// Squad ability
 			case ActionCommand::UseSquadAbility: {
 				Read<ActionCommandAbilityData>(mInStream, command.ability);
+				// Squad ability slots 6-8 belong to the three party members.
+				if (!Game::AbilitySelection::IsSquadAbility(command.ability.index)) {
+					break;
+				}
 
-				//
+				const auto abilityId = player->GetAbilityId(0xFF, static_cast<uint8_t>(command.ability.index));
+				if (abilityId == 0 || object->HasCooldown(abilityId)) {
+					break;
+				}
+				// Do not acknowledge an ability that has no script implementation.
+				if (!mGame.GetLua().GetAbility(abilityId)) {
+					break;
+				}
+
 				object->SetOrientation(command.data.orientation);
-
-				//
-				CombatData combatData {};
+				CombatData combatData{};
 				combatData.targetId = command.ability.targetId;
 				combatData.cursorPosition = command.ability.cursorPosition;
 				combatData.targetPosition = command.ability.targetPosition;
-
-				auto currentSquadIndex = player->GetCurrentDeckIndex();
-				combatData.abilityId = player->GetAbilityId(0xFF, command.ability.index);
-				combatData.abilityRank = 0;
-
+				combatData.abilityId = abilityId;
+				combatData.abilityRank = command.ability.rank;
 				combatData.unk[0] = command.ability.rank;
 				combatData.unk[1] = command.ability.unk;
 				combatData.valueFromActionResponse = command.ability.userData;
 
-				std::cout << "🔄 Criando ActionResponse..." << std::endl;
-				std::cout << "Combat Data - Ability ID: " << combatData.abilityId << std::endl;
-				std::cout << "Combat Data - Target ID: " << combatData.targetId << std::endl;
-
-
-				AbilityCommandResponse actionResponse;
-				actionResponse.abilityId = combatData.abilityId;
-				actionResponse.cooldown = 2000;
-				actionResponse.userData = 0x4321;
-
-				std::cout << "✅ ActionResponse criado - Ability ID: " << actionResponse.abilityId << std::endl;
-
-				std::cout << "🔄 Enviando ActionCommandResponse..." << std::endl;
-				SendActionCommandResponse(client, actionResponse);
-				std::cout << "✅ ActionCommandResponse enviado!" << std::endl;
-
-				/*
 				mGame.UseAbility(object, combatData);
-				SendCooldownUpdate(client, object, actionResponse.abilityId, actionResponse.cooldown);
-				*/
 
-				// SendModifierCreated(client, object);
-
-				std::cout << "🔄 Criando Director..." << std::endl;
-				cAIDirector director;
-				director.mbBossComplete = true;
-				std::cout << "✅ Director criado!" << std::endl;
-
-				std::cout << "🔄 Enviando DirectorState..." << std::endl;
-				SendDirectorState(client, director);
-				std::cout << "✅ DirectorState enviado!" << std::endl;
-
-				std::cout << "=== UseCharacterAbility COMPLETO ===" << std::endl;
+				// Lua scripts manage their own cooldown updates. Avoid fabricating
+				// a 2-second cooldown or a completed boss/director state here.
+				AbilityCommandResponse response{};
+				response.abilityId = abilityId;
+				response.userData = command.ability.userData;
+				SendActionCommandResponse(client, response);
 				break;
 			}
 
