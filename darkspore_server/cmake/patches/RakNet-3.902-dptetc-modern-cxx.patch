@@ -22,3 +22,35 @@ diff --git a/Source/DS_BinarySearchTree.h b/Source/DS_BinarySearchTree.h
 +			current = this->FindParent( *( current->item ) );
  			
  		}
+@@ -227,5 +227,5 @@
+ 			return false;
+ 			
+-		return Height( A->right ) > Height( A->left );
++		return this->Height( A->right ) > this->Height( A->left );
+ 	}
+ 	
+@@ -236,5 +236,5 @@
+ 			return false;
+ 			
+-		return Height( A->left ) > Height( A->right );
++		return this->Height( A->left ) > this->Height( A->right );
+ 	}
+ 	
+@@ -273,6 +273,6 @@
+ 		*/
+ 		
+-		B = FindParent( *( C->item ) );
++		B = this->FindParent( *( C->item ) );
+-		A = FindParent( *( B->item ) );
++		A = this->FindParent( *( B->item ) );
+ 		D = C->right;
+ 		
+@@ -337,6 +337,6 @@
+ 		*/
+ 		
+-		B = FindParent( *( C->item ) );
++		B = this->FindParent( *( C->item ) );
+-		A = FindParent( *( B->item ) );
++		A = this->FindParent( *( B->item ) );
+ 		D = C->left;
+ 		
