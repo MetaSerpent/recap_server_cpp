@@ -54,3 +54,14 @@ https://github.com/Resurrection-Capsule/Resurrection-Capsule/blob/master/HOW_TO_
 
 For testing, use throwaway local account credentials because Darkspore uses
 outdated connection protocols. Sanitize logs before sharing.
+
+## Headless shutdown regression
+
+A no-client Linux smoke test of the compiled ReCap binary with bundled
+`data/` and a deliberately absent game installation reproduced a SIGSEGV in
+`RoomCategory::~RoomCategory` during `SporeNet::Instance` teardown. The
+room/view/category maps own their objects: destructors must not call back into
+`RoomManager::Remove*` while those maps are being destroyed. Deletion must
+be initiated explicitly by the manager. Verify by rerunning the headless
+server with local ports, checking all exposed listeners, and stopping with
+SIGTERM; no game assets are necessary for this shutdown test.

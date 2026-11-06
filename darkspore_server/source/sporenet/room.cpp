@@ -60,9 +60,10 @@ namespace SporeNet {
 	// RoomView
 	RoomView::RoomView(RoomManager& manager) : mManager(manager) {}
 
-	RoomView::~RoomView() {
-		mManager.RemoveRoomView(mId);
-	}
+	// The manager owns this object through its map. Erasing that map from a
+	// destructor (including during map.clear()) recursively invalidates the
+	// map's RB-tree and can crash shutdown.
+	RoomView::~RoomView() = default;
 
 	void RoomView::WriteTo(Blaze::TDF::Packet& packet) const {
 		packet.put_string("DISP", "hello");
@@ -84,9 +85,10 @@ namespace SporeNet {
 	// RoomCategory
 	RoomCategory::RoomCategory(RoomManager& manager) : mManager(manager) {}
 
-	RoomCategory::~RoomCategory() {
-		mManager.RemoveRoomCategory(mId);
-	}
+	// The manager owns this object through its map. Erasing that map from a
+	// destructor (including during map.clear()) recursively invalidates the
+	// map's RB-tree and can crash shutdown.
+	RoomCategory::~RoomCategory() = default;
 
 	void RoomCategory::WriteTo(Blaze::TDF::Packet& packet) const {
 		uint32_t viewId;
@@ -126,9 +128,10 @@ namespace SporeNet {
 	// Room
 	Room::Room(RoomManager& manager) : mManager(manager) {}
 
-	Room::~Room() {
-		mManager.RemoveRoom(mId);
-	}
+	// The manager owns this object through its map. Erasing that map from a
+	// destructor (including during map.clear()) recursively invalidates the
+	// map's RB-tree and can crash shutdown.
+	Room::~Room() = default;
 
 	void Room::AddUser(const UserPtr& user) {
 		if (user) {
