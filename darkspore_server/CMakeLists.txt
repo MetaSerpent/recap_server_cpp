@@ -96,7 +96,9 @@ target_link_libraries(recap_server PRIVATE OpenSSL::SSL OpenSSL::Crypto OpenSSL:
 CPMAddPackage(
     NAME luajit
     GIT_REPOSITORY https://github.com/LuaJIT/LuaJIT.git
-    VERSION 2.1.0-beta3
+    # The old v2.1.0-beta3 tag is absent from the upstream Git refs.
+    # Pin an immutable commit from the maintained v2.1 branch instead.
+    GIT_TAG ea9eb7edb5eac4a9d175d74523db34fac0fa5180
     DOWNLOAD_ONLY YES)
 if(luajit_ADDED)
     add_library(luajit STATIC IMPORTED)
