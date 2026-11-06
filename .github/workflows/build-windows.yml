@@ -61,6 +61,16 @@ jobs:
           cmake --build . --config Release --parallel 2
           cmake -DCOMPONENT=recap_server -Pcmake_install.cmake
 
+      - name: Smoke test command-line entry point
+        run: |
+          cd darkspore_server
+          ./dist/bin/recap_server.exe --version
+          ./dist/bin/recap_server.exe --help
+          if ./dist/bin/recap_server.exe --darkspore-path; then
+            echo "Expected missing --darkspore-path to fail" >&2
+            exit 1
+          fi
+
       - name: Adding needed files
         run: |
           cd darkspore_server

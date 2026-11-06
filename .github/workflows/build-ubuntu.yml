@@ -46,6 +46,15 @@ jobs:
           cmake --build build --parallel 2
           cmake -DCOMPONENT=recap_server -Pbuild/cmake_install.cmake
 
+      - name: Smoke test command-line entry point
+        run: |
+          darkspore_server/AppDir/usr/bin/recap_server --version
+          darkspore_server/AppDir/usr/bin/recap_server --help
+          if darkspore_server/AppDir/usr/bin/recap_server --darkspore-path; then
+            echo "Expected missing --darkspore-path to fail" >&2
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@v4
         with:
           name: recap-server-ubuntu-x64

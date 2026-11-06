@@ -32,6 +32,10 @@ Darkspore installation and launcher. Do not commit EA executable or assets.
 
 A passing isolated test or C++ server build does not prove a playable game.
 
+The Windows/Ubuntu build workflows now smoke-test the installed server's
+`--version`, `--help`, and invalid `--darkspore-path` behavior before uploading
+artifacts. These entry-point checks require no proprietary game assets.
+
 ## Reverse-engineering priorities
 
 1. Capture sanitized RakNet packets for each ability and verify cooldown,
