@@ -169,6 +169,16 @@ if(lodepng_ADDED)
 endif()
 
 # RakNet
+# The original RakNet mirror has an expired/misconfigured TLS certificate.
+# FetchContent/CPM may create a sub-build that does not propagate its own
+# TLS_VERIFY argument. Scope CMake's fallback to this one hashed archive.
+if(DEFINED CMAKE_TLS_VERIFY)
+    set(RECAP_SAVED_TLS_VERIFY "${CMAKE_TLS_VERIFY}")
+    set(RECAP_HAD_TLS_VERIFY TRUE)
+else()
+    set(RECAP_HAD_TLS_VERIFY FALSE)
+endif()
+set(CMAKE_TLS_VERIFY OFF)
 CPMAddPackage(
     NAME raknet
     VERSION 3.902
@@ -180,6 +190,13 @@ CPMAddPackage(
     # still authenticates every downloaded byte. Scope this exception to RakNet.
     TLS_VERIFY OFF
     DOWNLOAD_ONLY YES)
+if(RECAP_HAD_TLS_VERIFY)
+    set(CMAKE_TLS_VERIFY "${RECAP_SAVED_TLS_VERIFY}")
+else()
+    unset(CMAKE_TLS_VERIFY)
+endif()
+unset(RECAP_SAVED_TLS_VERIFY)
+unset(RECAP_HAD_TLS_VERIFY)
 if(raknet_ADDED)
     # Apply patches
     set(RAKNET_PATCH "${CMAKE_CURRENT_LIST_DIR}/cmake/patches/RakNet-3.902.patch")
