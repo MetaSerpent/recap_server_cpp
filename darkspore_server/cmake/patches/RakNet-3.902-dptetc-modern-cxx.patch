@@ -1,0 +1,24 @@
+diff --git a/Source/DS_BinarySearchTree.h b/Source/DS_BinarySearchTree.h
+--- a/Source/DS_BinarySearchTree.h
++++ b/Source/DS_BinarySearchTree.h
+@@ -167,5 +167,5 @@
+ 				left_height = 0;
+ 			else
+-				left_height = Height( current->left );
++				left_height = this->Height( current->left );
+ 				
+ 			if ( current->right == 0 )
+@@ -172,5 +172,5 @@
+ 				right_height = 0;
+ 			else
+-				right_height = Height( current->right );
++				right_height = this->Height( current->right );
+ 				
+ 			if ( right_height - left_height == 2 )
+@@ -200,5 +200,5 @@
+ 				break;
+ 				
+-			current = FindParent( *( current->item ) );
++			current = this->FindParent( *( current->item ) );
+ 			
+ 		}

@@ -185,6 +185,27 @@ if(raknet_ADDED)
     if(NOT RAKNET_SOURCES)
         message(FATAL_ERROR "Pinned RakNet 3.902 source tree has no C++ sources")
     endif()
+    # Strictly apply the three modern C++ dependent-base lookup fixes.
+    # The pinned source differs from the older ReCap RakNet ZIP patch.
+    set(RAKNET_TEMPLATE_PATCH "${CMAKE_CURRENT_LIST_DIR}/cmake/patches/RakNet-3.902-dptetc-modern-cxx.patch")
+    execute_process(COMMAND git init -q
+        WORKING_DIRECTORY "${RAKNET_SOURCE_DIR}"
+        RESULT_VARIABLE RAKNET_INIT_RESULT)
+    if(NOT RAKNET_INIT_RESULT EQUAL 0)
+        message(FATAL_ERROR "Unable to prepare a reproducible RakNet patch directory")
+    endif()
+    execute_process(COMMAND git apply --check "${RAKNET_TEMPLATE_PATCH}"
+        WORKING_DIRECTORY "${RAKNET_SOURCE_DIR}"
+        RESULT_VARIABLE RAKNET_PATCH_CHECK)
+    if(NOT RAKNET_PATCH_CHECK EQUAL 0)
+        message(FATAL_ERROR "RakNet 3.902 template fix no longer applies")
+    endif()
+    execute_process(COMMAND git apply "${RAKNET_TEMPLATE_PATCH}"
+        WORKING_DIRECTORY "${RAKNET_SOURCE_DIR}"
+        RESULT_VARIABLE RAKNET_PATCH_RESULT)
+    if(NOT RAKNET_PATCH_RESULT EQUAL 0)
+        message(FATAL_ERROR "Could not apply RakNet 3.902 template fix")
+    endif()
     add_library(RakNetStatic STATIC ${RAKNET_SOURCES})
     target_include_directories(RakNetStatic PUBLIC "${RAKNET_SOURCE_DIR}/Source")
     if(WIN32)
