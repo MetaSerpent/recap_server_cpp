@@ -46,6 +46,12 @@ jobs:
           cmake --build build --parallel 2
           cmake -DCOMPONENT=recap_server -Pbuild/cmake_install.cmake
 
+      - name: Headless HTTP startup and clean shutdown
+        run: |
+          python3 tests/headless_server_smoke.py \
+            --server darkspore_server/AppDir/usr/bin/recap_server \
+            --data darkspore_server/res/data
+
       - name: Smoke test command-line entry point
         run: |
           darkspore_server/AppDir/usr/bin/recap_server --version
