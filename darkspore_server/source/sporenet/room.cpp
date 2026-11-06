@@ -151,6 +151,9 @@ namespace SporeNet {
 		if (!user) {
 			return;
 		}
+		// The manager may erase the last owning pointer below. Keep the room
+		// alive until this method returns.
+		const auto keepAlive = shared_from_this();
 		mUsers.erase(user->get_id());
 		if (user->GetRoom().get() == this) {
 			user->SetRoom(nullptr);
