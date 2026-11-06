@@ -54,14 +54,18 @@ Application& Application::InitApp(int argc, char* argv[]) {
                 std::cout << RECAP_VERSION_STRING << std::endl;
                 exit(0);
             } else if (strcmp(argv[i], "--darkspore-path") == 0) {
-                i++;
-                darksporeInstallPath = std::string(argv[i]);
+                if (i + 1 >= argc) {
+                    std::cerr << "Missing value for --darkspore-path\n";
+                    exit(2);
+                }
+                darksporeInstallPath = std::string(argv[++i]);
             } else if (strcmp(argv[i], "--help") == 0 ||
                        strcmp(argv[i], "-h") == 0) {
                 std::cout << "Usage: " << argv[0] << " [options]\n";
                 std::cout << "Options:\n";
                 std::cout << "  --timestamps, -ts    Timestamp log\n";
                 std::cout << "  --version, -v        Display server version\n";
+                std::cout << "  --darkspore-path DIR Darkspore installation path\n";
                 std::cout << "  --help, -h           Shows this help\n";
                 exit(0);
             }

@@ -744,6 +744,9 @@ namespace RakNet {
 					std::cout << "=== Start UseCharacterAbility ===" << std::endl;
 					
 					Read<ActionCommandAbilityData>(mInStream, command.ability);
+					if (command.ability.index > 8) {
+						break;
+					}
 					
 					std::cout << "Target ID: " << command.ability.targetId << std::endl;
 					std::cout << "Ability Index: " << command.ability.index << std::endl;
@@ -752,9 +755,11 @@ namespace RakNet {
 					combatData.targetId = command.ability.targetId;
 					combatData.cursorPosition = command.ability.cursorPosition;
 					combatData.targetPosition = command.ability.targetPosition;
-					// TODO: find creature index, can be in range of [0..2] i.e. one of three characters in squad
-					const uint32_t creatureIndex = 0;
-					combatData.abilityId = player->GetAbilityId(creatureIndex, command.ability.index);
+					const uint32_t creatureIndex = player->GetCurrentDeckIndex();
+					combatData.abilityId = player->GetAbilityId(static_cast<uint8_t>(creatureIndex), static_cast<uint8_t>(command.ability.index));
+					if (combatData.abilityId == 0) {
+						break;
+					}
 					combatData.abilityRank = command.ability.rank;
 					combatData.unk[0] = command.ability.rank;
 					combatData.unk[1] = command.ability.unk;

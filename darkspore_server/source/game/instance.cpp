@@ -461,7 +461,7 @@ namespace Game {
 			}
 
 			const auto& client = mServer->GetClient(static_cast<uint8_t>(0));
-			if (client) {
+			if (client && !mObjectives.empty()) {
 				auto& objective = mObjectives.front();
 				if (objective.id == utils::hash_id("FinishLevelQuickly")) {
 					objective.value = static_cast<uint32_t>(GetTimeElapsed() / 1000);

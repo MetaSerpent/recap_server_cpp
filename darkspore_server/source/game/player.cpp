@@ -86,6 +86,9 @@ namespace Game {
 	}
 
 	uint32_t Player::GetAbilityId(uint8_t creatureIndex, uint8_t abilityIndex) const {
+		if (!mUser || !mSquad) {
+			return 0;
+		}
 		// TODO: rewrite creature stuff
 		switch (abilityIndex) {
 			case 0: case 2: case 3: {
@@ -94,6 +97,9 @@ namespace Game {
 				}
 
 				const auto& creatureIds = mSquad->GetCreatureIds();
+				if (creatureIndex >= creatureIds.size()) {
+					return 0;
+				}
 				const auto& creature = mUser->GetCreatureById(creatureIds[creatureIndex]);
 				if (!creature) {
 					return 0;
@@ -110,6 +116,9 @@ namespace Game {
 
 			case 6: case 7: case 8: {
 				const auto& creatureIds = mSquad->GetCreatureIds();
+				if (abilityIndex - 6 >= creatureIds.size()) {
+					return 0;
+				}
 				const auto& creature = mUser->GetCreatureById(creatureIds[abilityIndex - 6]);
 				if (creature) {
 					return creature->GetAbility(2);
@@ -200,6 +209,9 @@ namespace Game {
 	}
 
 	bool Player::SwapCharacter(uint32_t index) {
+		if (index >= mCharacterObjects.size() || !mCharacterObjects[index]) {
+			return false;
+		}
 		// TODO: cooldown checks, etc etc
 		mCurrentDeckIndex = index;
 		mDataBits.set(PlayerDataBits::CurrentDeckIndex);
