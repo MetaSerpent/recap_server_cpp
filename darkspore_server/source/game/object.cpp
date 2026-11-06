@@ -1,6 +1,7 @@
 
 // Include
 #include "object.h"
+#include "cooldown_math.h"
 #include "objectmanager.h"
 #include "instance.h"
 #include "catalyst.h"
@@ -1151,7 +1152,26 @@ namespace Game {
 	}
 
 	Cooldown Object::ScaleCooldown(uint32_t abilityId, float scale) {
-		return Cooldown {};
+		auto it = mCooldowns.find(abilityId);
+		if (it == mCooldowns.end()) {
+			return {};
+		}
+		// Invalid multipliers must never corrupt an active timer.
+		if (!std::isfinite(scale) || scale < 0.f) {
+			return it->second;
+		}
+
+		const auto now = GetGame().GetTime();
+		const auto [oldEnd, oldDuration] = it->second;
+		const uint32_t remaining = CooldownMath::ScaleRemainingMilliseconds(oldEnd, now, scale);
+		if (remaining == 0) {
+			mCooldowns.erase(it);
+			return {};
+		}
+		// Scale only the remaining time; the client receives the new start
+		// and duration through SendCooldownUpdate.
+		it->second = std::make_tuple(now + remaining, remaining);
+		return it->second;
 	}
 
 	// Properties

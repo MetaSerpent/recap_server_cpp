@@ -761,7 +761,12 @@ namespace LuaFunction {
 		}
 
 		auto ScaleCooldown(sol::this_state L, sol::object objectValue, uint32_t abilityId, float scale) {
-			//
+			auto& game = LuaGetGame(L);
+			auto object = LuaGetObject(game.GetObjectManager(), objectValue);
+			if (object) {
+				const auto [end, duration] = object->ScaleCooldown(abilityId, scale);
+				game.SendCooldownUpdate(object, abilityId, end - duration, duration);
+			}
 		}
 
 		auto TakeDamage(sol::this_state L,
