@@ -113,6 +113,7 @@ namespace SporeNet {
 
 			uint32_t mId = 0;
 			uint32_t mCapacity = 1;
+			bool mPermanent = false; // Built-in lobbies remain after all users leave.
 
 			friend class RoomManager;
 	};

@@ -134,19 +134,30 @@ namespace SporeNet {
 	Room::~Room() = default;
 
 	void Room::AddUser(const UserPtr& user) {
-		if (user) {
-			user->SetRoom(shared_from_this());
-			mUsers.emplace(user->get_id(), user);
+		if (!user) {
+			return;
 		}
+		// Move membership instead of leaving a stale weak reference in the
+		// old lobby. Keep the previous room alive during its removal callback.
+		auto previousRoom = user->GetRoom();
+		if (previousRoom && previousRoom.get() != this) {
+			previousRoom->RemoveUser(user);
+		}
+		user->SetRoom(shared_from_this());
+		mUsers.insert_or_assign(user->get_id(), user);
 	}
 
 	void Room::RemoveUser(const UserPtr& user) {
-		if (user) {
-			mUsers.erase(user->get_id());
-			if (mUsers.empty()) {
-				// && is user room
-				mManager.RemoveRoom(mId);
-			}
+		if (!user) {
+			return;
+		}
+		mUsers.erase(user->get_id());
+		if (user->GetRoom().get() == this) {
+			user->SetRoom(nullptr);
+		}
+		// The four permanent lobby rooms must survive user disconnects.
+		if (mUsers.empty() && !mPermanent) {
+			mManager.RemoveRoom(mId);
 		}
 	}
 
@@ -215,7 +226,9 @@ namespace SporeNet {
 
 		//		Rooms
 		for (uint32_t i = 0; i < 4; ++i) {
-			CreateRoom(i + 1)->SetCategory(GetRoomCategory(i + 1));
+			auto room = CreateRoom(i + 1);
+			room->mPermanent = true;
+			room->SetCategory(GetRoomCategory(i + 1));
 		}
 	}
 

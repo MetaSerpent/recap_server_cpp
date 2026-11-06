@@ -65,3 +65,11 @@ room/view/category maps own their objects: destructors must not call back into
 be initiated explicitly by the manager. Verify by rerunning the headless
 server with local ports, checking all exposed listeners, and stopping with
 SIGTERM; no game assets are necessary for this shutdown test.
+
+## Default lobby lifetime
+
+RoomManager creates four built-in rooms. They are now marked permanent, so
+ordinary disconnects leave them available to future players. Moving a user
+between rooms removes the previous room's membership record and clears the
+old room pointer before attaching the new one. Dynamic rooms can still be
+deleted automatically when empty.
