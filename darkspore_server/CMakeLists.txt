@@ -194,13 +194,13 @@ if(raknet_ADDED)
     if(NOT RAKNET_INIT_RESULT EQUAL 0)
         message(FATAL_ERROR "Unable to prepare a reproducible RakNet patch directory")
     endif()
-    execute_process(COMMAND git apply --check "${RAKNET_TEMPLATE_PATCH}"
+    execute_process(COMMAND git apply --check --ignore-whitespace "${RAKNET_TEMPLATE_PATCH}"
         WORKING_DIRECTORY "${RAKNET_SOURCE_DIR}"
         RESULT_VARIABLE RAKNET_PATCH_CHECK)
     if(NOT RAKNET_PATCH_CHECK EQUAL 0)
         message(FATAL_ERROR "RakNet 3.902 template fix no longer applies")
     endif()
-    execute_process(COMMAND git apply "${RAKNET_TEMPLATE_PATCH}"
+    execute_process(COMMAND git apply --ignore-whitespace "${RAKNET_TEMPLATE_PATCH}"
         WORKING_DIRECTORY "${RAKNET_SOURCE_DIR}"
         RESULT_VARIABLE RAKNET_PATCH_RESULT)
     if(NOT RAKNET_PATCH_RESULT EQUAL 0)
