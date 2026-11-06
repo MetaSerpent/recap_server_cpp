@@ -54,3 +54,64 @@ diff --git a/Source/DS_BinarySearchTree.h b/Source/DS_BinarySearchTree.h
 +		A = this->FindParent( *( B->item ) );
  		D = C->left;
  		
+diff --git a/Source/UDPForwarder.cpp b/Source/UDPForwarder.cpp
+index 648bb51..cceff65 100644
+--- a/Source/UDPForwarder.cpp
++++ b/Source/UDPForwarder.cpp
+@@ -11,6 +11,8 @@ static const unsigned short DEFAULT_MAX_FORWARD_ENTRIES=64;
+ 
+ RAK_THREAD_DECLARATION(UpdateUDPForwarder);
+ 
++namespace RakNet {
++
+ bool operator<( const DataStructures::MLKeyRef<UDPForwarder::SrcAndDest> &inputKey, const UDPForwarder::ForwardEntry *cls )
+ {
+ 	return inputKey.Get().source < cls->srcAndDest.source ||
+@@ -26,6 +28,7 @@ bool operator==( const DataStructures::MLKeyRef<UDPForwarder::SrcAndDest> &input
+ 	return inputKey.Get().source == cls->srcAndDest.source && inputKey.Get().dest == cls->srcAndDest.dest;
+ }
+ 
++}  // namespace RakNet
+ 
+ UDPForwarder::ForwardEntry::ForwardEntry() {socket=INVALID_SOCKET; timeLastDatagramForwarded=RakNet::GetTimeMS(); updatedSourcePort=false; updatedDestPort=false;}
+ UDPForwarder::ForwardEntry::~ForwardEntry() {
+diff --git a/Source/UDPProxyClient.cpp b/Source/UDPProxyClient.cpp
+index b907f81..9bf57f2 100644
+--- a/Source/UDPProxyClient.cpp
++++ b/Source/UDPProxyClient.cpp
+@@ -11,10 +11,13 @@
+ using namespace RakNet;
+ static const int DEFAULT_UNRESPONSIVE_PING_TIME=1000;
+ 
++namespace RakNet {
++
+ bool operator<( const DataStructures::MLKeyRef<UDPProxyClient::ServerWithPing> &inputKey, const UDPProxyClient::ServerWithPing &cls ) {return inputKey.Get().serverAddress < cls.serverAddress;}
+ bool operator>( const DataStructures::MLKeyRef<UDPProxyClient::ServerWithPing> &inputKey, const UDPProxyClient::ServerWithPing &cls ) {return inputKey.Get().serverAddress > cls.serverAddress;}
+ bool operator==( const DataStructures::MLKeyRef<UDPProxyClient::ServerWithPing> &inputKey, const UDPProxyClient::ServerWithPing &cls ) {return inputKey.Get().serverAddress == cls.serverAddress;}
+ 
++}  // namespace RakNet
+ 
+ UDPProxyClient::UDPProxyClient()
+ {
+diff --git a/Source/UDPProxyCoordinator.cpp b/Source/UDPProxyCoordinator.cpp
+index b864599..479dab2 100644
+--- a/Source/UDPProxyCoordinator.cpp
++++ b/Source/UDPProxyCoordinator.cpp
+@@ -16,6 +16,8 @@ static const int DEFAULT_UNRESPONSIVE_PING_TIME=DEFAULT_CLIENT_UNRESPONSIVE_PING
+ 
+ using namespace RakNet;
+ 
++namespace RakNet {
++
+ bool operator<( const DataStructures::MLKeyRef<unsigned short> &inputKey, const UDPProxyCoordinator::ServerWithPing &cls ) {return inputKey.Get() < cls.ping;}
+ bool operator>( const DataStructures::MLKeyRef<unsigned short> &inputKey, const UDPProxyCoordinator::ServerWithPing &cls ) {return inputKey.Get() > cls.ping;}
+ bool operator==( const DataStructures::MLKeyRef<unsigned short> &inputKey, const UDPProxyCoordinator::ServerWithPing &cls ) {return inputKey.Get() == cls.ping;}
+@@ -35,6 +37,8 @@ bool operator==( const DataStructures::MLKeyRef<UDPProxyCoordinator::SenderAndTa
+ 	return inputKey.Get().senderClientAddress == cls->sata.senderClientAddress && inputKey.Get().targetClientAddress == cls->sata.targetClientAddress;
+ }
+ 
++}  // namespace RakNet
++
+ UDPProxyCoordinator::UDPProxyCoordinator()
+ {
+ 
