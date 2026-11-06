@@ -1122,33 +1122,29 @@ namespace Game {
 	}
 
 	Cooldown Object::AddCooldown(uint32_t abilityId, uint32_t milliseconds) {
-		const auto time = GetGame().GetTime();
-		const auto& [it, inserted] = mCooldowns.try_emplace(abilityId);
-		if (inserted || time > std::get<0>(it->second)) {
-			it->second = std::make_tuple(time + milliseconds, milliseconds);
-		} else {
-			const auto& [end, duration] = it->second;
-			const auto newDuration = static_cast<uint32_t>(end - time + milliseconds);
-			it->second = std::make_tuple(end - duration + newDuration, newDuration);
-		}
+		const auto now = GetGame().GetTime();
+		auto& [it, inserted] = mCooldowns.try_emplace(abilityId);
+		const auto expiry = inserted ? now : std::get<0>(it->second);
+		const auto remaining = CooldownMath::ExtendRemainingMilliseconds(expiry, now, milliseconds);
+		// New duration is measured from *now*, not the old cooldown start.
+		it->second = std::make_tuple(now + remaining, remaining);
 		return it->second;
 	}
 
 	Cooldown Object::RemoveCooldown(uint32_t abilityId, uint32_t milliseconds) {
-		Cooldown cooldown;
-		if (auto it = mCooldowns.find(abilityId); it != mCooldowns.end()) {
-			const auto time = GetGame().GetTime();
-			
-			auto& [end, duration] = it->second;
-			if (milliseconds >= duration) {
-				mCooldowns.erase(it);
-			} else {
-				end -= milliseconds;
-				duration -= milliseconds;
-				cooldown = it->second;
-			}
+		auto it = mCooldowns.find(abilityId);
+		if (it == mCooldowns.end()) {
+			return {};
 		}
-		return cooldown;
+		const auto now = GetGame().GetTime();
+		const auto duration = CooldownMath::ReduceRemainingMilliseconds(
+			std::get<0>(it->second), now, milliseconds);
+		if (duration == 0) {
+			mCooldowns.erase(it);
+			return {};
+		}
+		it->second = std::make_tuple(now + duration, duration);
+		return it->second;
 	}
 
 	Cooldown Object::ScaleCooldown(uint32_t abilityId, float scale) {

@@ -13,6 +13,7 @@ Darkspore installation and launcher. Do not commit EA executable or assets.
 - Ignore stale/disconnected clients, malformed RakNet timestamps, invalid trigger iterators and actions targeting non-owned actors.
 - Add standalone C++ slot-selection tests and a lightweight CI workflow.
 - Implement Lua-exposed cooldown scaling with deterministic remaining-time math and saturation tests.
+- Correct active cooldown extension/reduction to operate on remaining time and saturate uint32 client durations.
 
 ## Verification matrix
 
