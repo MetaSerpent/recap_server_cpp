@@ -1,0 +1,45 @@
+# Restoration milestones and test gates
+
+This fork extends the GPLv3 **Resurrection Capsule server**, not the
+proprietary Darkspore game client. It cannot run without a compatible
+Darkspore installation and launcher. Do not commit EA executable or assets.
+
+## Completed code changes
+
+- Guard invalid hero indexes and unavailable squad characters.
+- Route character abilities from the selected hero, not always hero zero.
+- Reject invalid ability indexes before narrowing client-provided numbers.
+- Handle missing objectives and startup arguments without out-of-range access.
+- Add standalone C++ slot-selection tests and a lightweight CI workflow.
+
+## Verification matrix
+
+| Gate | Definition of done | Status |
+| --- | --- | --- |
+| P0-A | Standalone C++ ability routing tests | Local test passed; CI added |
+| P0-B | Windows and Ubuntu server build | Upstream build workflows; inspect run |
+| P0-C | Local login, hero selection, stage load | Needs real Darkspore client |
+| P0-D | All three heroes cast correct unlocked abilities | Needs client traces |
+| P0-E | Finish encounter and complete stage | Needs client traces |
+| P1-A | Loot, XP and save/load persist after restart | Not verified |
+| P1-B | Chain progression, cashout, replay | Not verified |
+
+A passing isolated test or C++ server build does not prove a playable game.
+
+## Reverse-engineering priorities
+
+1. Capture sanitized RakNet packets for each ability and verify cooldown,
+   confirmation and error response formats against the original client.
+2. Investigate the current squad-ability handler, which emits a hardcoded
+   director completion state; replace with measured authentic behavior.
+3. Verify damage, target deaths, AI scheduling, objective transitions.
+4. Reconstruct loot drops, inventory updates, persistence and mission rewards.
+5. Add version-specific client compatibility tests using independently held
+   copies of the game; avoid redistributing proprietary game content.
+6. Record reliable Windows/Wine install-to-first-mission reproduction steps.
+
+Upstream launch instructions:
+https://github.com/Resurrection-Capsule/Resurrection-Capsule/blob/master/HOW_TO_PLAY.md
+
+For testing, use throwaway local account credentials because Darkspore uses
+outdated connection protocols. Sanitize logs before sharing.

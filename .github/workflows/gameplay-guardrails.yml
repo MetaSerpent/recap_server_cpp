@@ -1,0 +1,16 @@
+name: Gameplay guardrails (standalone)
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ability-routing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile isolated gameplay tests
+        run: |
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/ability_selection_test.cpp -o /tmp/ability_selection_test
+      - name: Run isolated gameplay tests
+        run: /tmp/ability_selection_test

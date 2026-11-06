@@ -12,6 +12,7 @@
 #include "game/objectmanager.h"
 #include "game/serverevent.h"
 #include "game/catalyst.h"
+#include "game/ability_selection.h"
 
 #include <glm/gtx/euler_angles.hpp>
 
@@ -744,7 +745,7 @@ namespace RakNet {
 					std::cout << "=== Start UseCharacterAbility ===" << std::endl;
 					
 					Read<ActionCommandAbilityData>(mInStream, command.ability);
-					if (command.ability.index > 8) {
+					if (!Game::AbilitySelection::IsValidAbilityIndex(command.ability.index)) {
 						break;
 					}
 					
@@ -755,7 +756,8 @@ namespace RakNet {
 					combatData.targetId = command.ability.targetId;
 					combatData.cursorPosition = command.ability.cursorPosition;
 					combatData.targetPosition = command.ability.targetPosition;
-					const uint32_t creatureIndex = player->GetCurrentDeckIndex();
+					const auto creatureIndex = Game::AbilitySelection::ResolveHeroForAbility(
+						player->GetCurrentDeckIndex(), command.ability.index);
 					combatData.abilityId = player->GetAbilityId(static_cast<uint8_t>(creatureIndex), static_cast<uint8_t>(command.ability.index));
 					if (combatData.abilityId == 0) {
 						break;

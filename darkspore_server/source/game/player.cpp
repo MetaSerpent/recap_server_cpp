@@ -1,6 +1,7 @@
 
 // Include
 #include "player.h"
+#include "ability_selection.h"
 
 #include "instance.h"
 #include "objectmanager.h"
@@ -86,7 +87,7 @@ namespace Game {
 	}
 
 	uint32_t Player::GetAbilityId(uint8_t creatureIndex, uint8_t abilityIndex) const {
-		if (!mUser || !mSquad) {
+		if (!mUser || !mSquad || !AbilitySelection::IsValidAbilityIndex(abilityIndex)) {
 			return 0;
 		}
 		// TODO: rewrite creature stuff
@@ -97,7 +98,7 @@ namespace Game {
 				}
 
 				const auto& creatureIds = mSquad->GetCreatureIds();
-				if (creatureIndex >= creatureIds.size()) {
+				if (!AbilitySelection::IsValidHeroSlot(creatureIndex, creatureIds.size())) {
 					return 0;
 				}
 				const auto& creature = mUser->GetCreatureById(creatureIds[creatureIndex]);
@@ -116,7 +117,7 @@ namespace Game {
 
 			case 6: case 7: case 8: {
 				const auto& creatureIds = mSquad->GetCreatureIds();
-				if (abilityIndex - 6 >= creatureIds.size()) {
+				if (!AbilitySelection::IsValidHeroSlot(abilityIndex - 6, creatureIds.size())) {
 					return 0;
 				}
 				const auto& creature = mUser->GetCreatureById(creatureIds[abilityIndex - 6]);
@@ -209,7 +210,7 @@ namespace Game {
 	}
 
 	bool Player::SwapCharacter(uint32_t index) {
-		if (index >= mCharacterObjects.size() || !mCharacterObjects[index]) {
+		if (!AbilitySelection::IsValidHeroSlot(index, mCharacterObjects.size()) || !mCharacterObjects[index]) {
 			return false;
 		}
 		// TODO: cooldown checks, etc etc
