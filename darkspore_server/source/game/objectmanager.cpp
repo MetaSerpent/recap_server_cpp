@@ -48,7 +48,7 @@ namespace Game {
 		}
 
 		auto radius = mBoundingBox.extent.x;
-		for (auto it = mObjectStates.begin(); it != mObjectStates.end(); ++it) {
+		for (auto it = mObjectStates.begin(); it != mObjectStates.end();) {
 			bool isInRadius = glm::distance(it->first->GetPosition(), GetPosition()) <= radius;
 			if (it->second == 0) {
 				if (isInRadius) {
@@ -60,7 +60,9 @@ namespace Game {
 			} else {
 				OnExit(it->first);
 				it = mObjectStates.erase(it);
+				continue; // erase already returns the next valid iterator
 			}
+			++it;
 		}
 	}
 

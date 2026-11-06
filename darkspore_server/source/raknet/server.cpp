@@ -225,7 +225,9 @@ namespace RakNet {
 				mInStream.Read<uint8_t>(message);
 				if (message == ID_TIMESTAMP) {
 					constexpr auto timestampSize = sizeof(MessageID) + sizeof(RakNetTime);
-					RakAssert((mInStream.GetNumberOfUnreadBits() >> 3) > timestampSize);
+					if ((mInStream.GetNumberOfUnreadBits() >> 3) < timestampSize) {
+						return 0xFF; // truncated timestamp envelope
+					}
 
 					mInStream.IgnoreBytes(timestampSize - 1);
 					mInStream.Read<uint8_t>(message);
@@ -237,6 +239,11 @@ namespace RakNet {
 		};
 
 		for (Packet* packet = mSelf->Receive(); packet; mSelf->DeallocatePacket(packet), packet = mSelf->Receive()) {
+			if (!packet->data || packet->bitSize < 8 ||
+				(packet->data[0] == ID_TIMESTAMP &&
+				 packet->bitSize < 8 * (1 + sizeof(RakNetTime) + sizeof(MessageID)))) {
+				continue; // Ignore incomplete or empty network packets.
+			}
 			mInStream = BitStream(packet->data, packet->bitSize >> 3, false);
 
 			uint8_t packetType = GetPacketIdentifier();
@@ -258,7 +265,8 @@ namespace RakNet {
 	void Server::add_client_task(uint8_t id, PacketID packet) {
 		std::lock_guard<std::mutex> lock(mTaskMutex);
 		mTasks.push([this, id, packet] {
-			const auto& client = mClients.begin()->second;
+			// The player may have disconnected before this queued task runs.
+			const auto client = GetClient(id);
 			if (!client) {
 				return;
 			}
@@ -518,7 +526,7 @@ namespace RakNet {
 
 	ClientPtr Server::GetClient(uint8_t id) const {
 		for (const auto& [_, client] : mClients) {
-			if (client->GetId() == id) {
+			if (client && client->GetId() == id) {
 				return client;
 			}
 		}

@@ -624,10 +624,18 @@ namespace Game {
 			return;
 		}
 
-		auto firstClient = clients.begin()->second;
-		auto player = firstClient->GetPlayer();
-		auto characterObject = player->GetCharacterObject(1);
-
+		const auto& firstClient = clients.begin()->second;
+		if (!firstClient) {
+			return;
+		}
+		const auto& player = firstClient->GetPlayer();
+		if (!player) {
+			return;
+		}
+		const auto characterObject = player->GetDeployedCharacterObject();
+		if (!characterObject) {
+			return;
+		}
 		auto position = characterObject->GetPosition();
 
 		static uint64_t lootId = 0;
@@ -800,8 +808,13 @@ namespace Game {
 		}
 
 		const auto& firstClient = clients.begin()->second;
+		if (!firstClient) {
+			return;
+		}
 		const auto& player = firstClient->GetPlayer();
-
+		if (!player) {
+			return;
+		}
 		auto characterObject = player->GetDeployedCharacterObject();
 		if (!characterObject) {
 			return;
