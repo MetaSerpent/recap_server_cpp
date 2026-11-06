@@ -168,35 +168,27 @@ if(lodepng_ADDED)
     target_link_libraries(recap_server PRIVATE lodepng)
 endif()
 
-# RakNet
-# The original RakNet mirror has an expired/misconfigured TLS certificate.
-# FetchContent/CPM may create a sub-build that does not propagate its own
-# TLS_VERIFY argument. Scope CMake's fallback to this one hashed archive.
-if(DEFINED CMAKE_TLS_VERIFY)
-    set(RECAP_SAVED_TLS_VERIFY "${CMAKE_TLS_VERIFY}")
-    set(RECAP_HAD_TLS_VERIFY TRUE)
-else()
-    set(RECAP_HAD_TLS_VERIFY FALSE)
+# RakNet 3.902, matched against the original upstream SHA256.
+# Download in the top-level CMake process so the per-download TLS exception
+# cannot be lost when CPM starts a nested FetchContent sub-build.
+set(RECAP_RAKNET_SHA256 "8c45d0c25a77ef095e060bcbbc01e198eb98a7a1f713fdf067bfe01a919e4274")
+set(RECAP_RAKNET_ARCHIVE "${CMAKE_CURRENT_BINARY_DIR}/RakNet-3.902.zip")
+file(DOWNLOAD
+    "https://distcache.FreeBSD.org/local-distfiles/martymac/RakNet-3.902.zip"
+    "${RECAP_RAKNET_ARCHIVE}"
+    EXPECTED_HASH "SHA256=${RECAP_RAKNET_SHA256}"
+    TLS_VERIFY OFF
+    STATUS RECAP_RAKNET_DOWNLOAD_STATUS)
+list(GET RECAP_RAKNET_DOWNLOAD_STATUS 0 RECAP_RAKNET_DOWNLOAD_CODE)
+if(NOT RECAP_RAKNET_DOWNLOAD_CODE EQUAL 0)
+    message(FATAL_ERROR "Unable to obtain authentic RakNet 3.902 archive: ${RECAP_RAKNET_DOWNLOAD_STATUS}")
 endif()
-set(CMAKE_TLS_VERIFY OFF)
 CPMAddPackage(
     NAME raknet
     VERSION 3.902
-    # Preserve exact RakNet 3.902 bytes; original JenkinsSoftware host is unavailable.
-    # FreeBSD's archived distfile has the same audited SHA256 below.
-    URL https://distcache.FreeBSD.org/local-distfiles/martymac/RakNet-3.902.zip
-    URL_HASH SHA256=8c45d0c25a77ef095e060bcbbc01e198eb98a7a1f713fdf067bfe01a919e4274
-    # Archive mirror has an invalid TLS chain; the immutable SHA256 above
-    # still authenticates every downloaded byte. Scope this exception to RakNet.
-    TLS_VERIFY OFF
+    URL "${RECAP_RAKNET_ARCHIVE}"
+    URL_HASH "SHA256=${RECAP_RAKNET_SHA256}"
     DOWNLOAD_ONLY YES)
-if(RECAP_HAD_TLS_VERIFY)
-    set(CMAKE_TLS_VERIFY "${RECAP_SAVED_TLS_VERIFY}")
-else()
-    unset(CMAKE_TLS_VERIFY)
-endif()
-unset(RECAP_SAVED_TLS_VERIFY)
-unset(RECAP_HAD_TLS_VERIFY)
 if(raknet_ADDED)
     # Apply patches
     set(RAKNET_PATCH "${CMAKE_CURRENT_LIST_DIR}/cmake/patches/RakNet-3.902.patch")
