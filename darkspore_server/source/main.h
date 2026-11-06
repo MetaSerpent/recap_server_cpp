@@ -11,6 +11,7 @@
 #include "game/api.h"
 
 #include <filesystem>
+#include <thread>
 
 // Application
 class Application {
@@ -52,6 +53,9 @@ class Application {
 
 		boost::asio::io_context mIoService;
 		boost::asio::signal_set mSignals;
+
+		// Data initialization must finish before the server is destroyed.
+		std::thread mDataLoaderThread;
 
 		std::unique_ptr<Scheduler> mScheduler;
 

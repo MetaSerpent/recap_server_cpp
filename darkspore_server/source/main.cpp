@@ -152,7 +152,7 @@ bool Application::OnInit() {
 	mGameAPI->setup();
 
 	// Preparing the data folder
-	std::thread t([this]() {
+	mDataLoaderThread = std::thread([this]() {
 		if (!darksporeInstallPath.empty())
 		{
 			Installer::LoadDarksporeData(darksporeInstallPath, darksporeInstallVersion);
@@ -164,21 +164,32 @@ bool Application::OnInit() {
 		// Load scripts
 		Game::GlobalLua::Instance().Initialize();
 	});
-	t.detach();
 
 	return true;
 }
 
 int Application::OnExit() {
+	// Prevent shutdown while data extraction or the global Lua/noun loader
+	// is still accessing the game installation and shared server state.
+	if (mDataLoaderThread.joinable()) {
+		mDataLoaderThread.join();
+	}
 	mGameAPI.reset();
 	mRedirectorServer.reset();
 	mBlazeServer.reset();
+	mPssServer.reset();
+	mTickServer.reset();
+	mTelemetryServer.reset();
 	mHttpServer.reset();
+	mHttpTelemetryServer.reset();
+	mHttpQosServer.reset();
 	mQosServer.reset();
 	mSporeNet.reset();
 
-	mScheduler->Shutdown();
-	mScheduler.reset();
+	if (mScheduler) {
+		mScheduler->Shutdown();
+		mScheduler.reset();
+	}
 	return 0;
 }
 

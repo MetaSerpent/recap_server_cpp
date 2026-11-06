@@ -29,6 +29,10 @@ namespace Game {
 
 	void Config::Load(const std::string& path) {
 		const auto get_path_value = [](std::string& value) -> std::string& {
+			// An empty STORAGE_PATH must not trigger undefined behavior.
+			if (value.empty()) {
+				value = "storage/";
+			}
 			if (value.back() != '/') {
 				value.push_back('/');
 			}

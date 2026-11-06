@@ -14,6 +14,8 @@ Darkspore installation and launcher. Do not commit EA executable or assets.
 - Add standalone C++ slot-selection tests and a lightweight CI workflow.
 - Implement Lua-exposed cooldown scaling with deterministic remaining-time math and saturation tests.
 - Correct active cooldown extension/reduction to operate on remaining time and saturate uint32 client durations.
+- Join the data loading worker before server shutdown and close every instantiated service.
+- Normalize an empty STORAGE_PATH to the existing storage/ default.
 
 ## Verification matrix
 
