@@ -168,35 +168,40 @@ if(lodepng_ADDED)
     target_link_libraries(recap_server PRIVATE lodepng)
 endif()
 
-# RakNet 3.902, matched against the original upstream SHA256.
-# Download in the top-level CMake process so the per-download TLS exception
-# cannot be lost when CPM starts a nested FetchContent sub-build.
-set(RECAP_RAKNET_SHA256 "8c45d0c25a77ef095e060bcbbc01e198eb98a7a1f713fdf067bfe01a919e4274")
-set(RECAP_RAKNET_ARCHIVE "${CMAKE_CURRENT_BINARY_DIR}/RakNet-3.902.zip")
-file(DOWNLOAD
-    "https://distcache.FreeBSD.org/local-distfiles/martymac/RakNet-3.902.zip"
-    "${RECAP_RAKNET_ARCHIVE}"
-    EXPECTED_HASH "SHA256=${RECAP_RAKNET_SHA256}"
-    TLS_VERIFY OFF
-    STATUS RECAP_RAKNET_DOWNLOAD_STATUS)
-list(GET RECAP_RAKNET_DOWNLOAD_STATUS 0 RECAP_RAKNET_DOWNLOAD_CODE)
-if(NOT RECAP_RAKNET_DOWNLOAD_CODE EQUAL 0)
-    message(FATAL_ERROR "Unable to obtain authentic RakNet 3.902 archive: ${RECAP_RAKNET_DOWNLOAD_STATUS}")
-endif()
+# RakNet 3.902 is vendored in the historical Darkspore offline server.
+# Source is pinned to an immutable Git commit. This is intentionally NOT
+# upgraded to RakNet 4.x: the wire protocol is incompatible.
 CPMAddPackage(
     NAME raknet
-    VERSION 3.902
-    URL "${RECAP_RAKNET_ARCHIVE}"
-    URL_HASH "SHA256=${RECAP_RAKNET_SHA256}"
+    GIT_REPOSITORY https://github.com/dptetc/darkspore-offline.git
+    GIT_TAG 6b27c94ba4e3f3fc2d7a7d173123edc8af0c9380
     DOWNLOAD_ONLY YES)
 if(raknet_ADDED)
-    # Apply patches
+    set(RAKNET_SOURCE_DIR "${raknet_SOURCE_DIR}/server/libs/raknet-3.902-mod")
     set(RAKNET_PATCH "${CMAKE_CURRENT_LIST_DIR}/cmake/patches/RakNet-3.902.patch")
-    execute_process(COMMAND git init WORKING_DIRECTORY ${raknet_SOURCE_DIR})
-    execute_process(COMMAND git apply --ignore-whitespace --verbose ${RAKNET_PATCH} WORKING_DIRECTORY ${raknet_SOURCE_DIR})
+    # Reject patch drift explicitly, instead of proceeding with unpatched RakNet.
+    execute_process(COMMAND git init
+        WORKING_DIRECTORY "${RAKNET_SOURCE_DIR}"
+        RESULT_VARIABLE RAKNET_INIT_RESULT
+        OUTPUT_QUIET)
+    if(NOT RAKNET_INIT_RESULT EQUAL 0)
+        message(FATAL_ERROR "Unable to prepare RakNet patch directory")
+    endif()
+    execute_process(COMMAND git apply --check --ignore-whitespace "${RAKNET_PATCH}"
+        WORKING_DIRECTORY "${RAKNET_SOURCE_DIR}"
+        RESULT_VARIABLE RAKNET_PATCH_CHECK)
+    if(NOT RAKNET_PATCH_CHECK EQUAL 0)
+        message(FATAL_ERROR "RakNet 3.902 source no longer matches the compatibility patch")
+    endif()
+    execute_process(COMMAND git apply --ignore-whitespace "${RAKNET_PATCH}"
+        WORKING_DIRECTORY "${RAKNET_SOURCE_DIR}"
+        RESULT_VARIABLE RAKNET_PATCH_RESULT)
+    if(NOT RAKNET_PATCH_RESULT EQUAL 0)
+        message(FATAL_ERROR "Unable to apply RakNet compatibility patch")
+    endif()
     set(RAKNET_BUILD_SHARED OFF)
     set(RAKNET_BUILD_STATIC ON)
-    add_subdirectory(${raknet_SOURCE_DIR} ${raknet_BINARY_DIR})
+    add_subdirectory("${RAKNET_SOURCE_DIR}" "${raknet_BINARY_DIR}")
     target_link_libraries(recap_server PRIVATE RakNetStatic)
 endif()
 
