@@ -1123,7 +1123,7 @@ namespace Game {
 
 	Cooldown Object::AddCooldown(uint32_t abilityId, uint32_t milliseconds) {
 		const auto now = GetGame().GetTime();
-		auto& [it, inserted] = mCooldowns.try_emplace(abilityId);
+		auto [it, inserted] = mCooldowns.try_emplace(abilityId);
 		const auto expiry = inserted ? now : std::get<0>(it->second);
 		const auto remaining = CooldownMath::ExtendRemainingMilliseconds(expiry, now, milliseconds);
 		// New duration is measured from *now*, not the old cooldown start.
