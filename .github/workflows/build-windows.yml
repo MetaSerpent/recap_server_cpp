@@ -12,13 +12,13 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
     defaults:
       run:
         shell: msys2 {0}
     steps:
       - name: Check out sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up MSYS2
         uses: msys2/setup-msys2@v2
@@ -63,4 +63,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: recap-server-windows-x64
-          path: ${{runner.workspace}}/recap_server/darkspore_server/dist
+          path: ${{ github.workspace }}/darkspore_server/dist
