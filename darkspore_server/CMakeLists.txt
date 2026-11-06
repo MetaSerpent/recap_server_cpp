@@ -176,6 +176,9 @@ CPMAddPackage(
     # FreeBSD's archived distfile has the same audited SHA256 below.
     URL https://distcache.FreeBSD.org/local-distfiles/martymac/RakNet-3.902.zip
     URL_HASH SHA256=8c45d0c25a77ef095e060bcbbc01e198eb98a7a1f713fdf067bfe01a919e4274
+    # Archive mirror has an invalid TLS chain; the immutable SHA256 above
+    # still authenticates every downloaded byte. Scope this exception to RakNet.
+    TLS_VERIFY OFF
     DOWNLOAD_ONLY YES)
 if(raknet_ADDED)
     # Apply patches
