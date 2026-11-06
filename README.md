@@ -1,4 +1,46 @@
 # Resurrection Capsule Server
+
+> **MetaSerpent restoration fork — experimental.**
+> [Build and test results](https://github.com/MetaSerpent/recap_server_cpp/actions) ·
+> [Restoration plan](docs/RESTORATION_PLAN.md) ·
+> [Upstream project](https://github.com/Resurrection-Capsule/Resurrection-Capsule)
+
+### Restoration progress
+
+This fork maintains the original C++ ReCap server and extends its local
+Darkspore compatibility. It currently includes:
+
+- Pinned, buildable historical RakNet 3.902 source and modern C++ fixes.
+- Crash and network-packet guards; safe client disconnects and trigger erasure.
+- Correct three-hero ability slot lookup, actual Lua dispatch for squad
+  abilities, and acknowledgements only when a script accepts execution.
+- Cooldown scaling, extension and reduction based on remaining time.
+- Stable one-time dungeon initialization, startup/shutdown and resource cleanup.
+- GitHub Actions checks for C++ routing/cooldown math, source contracts, and
+  bundled JSON/XML; standalone server builds for Ubuntu and Windows.
+
+**This repository does not distribute the proprietary Darkspore game binary
+or assets.** Running the game still requires a compatible client, launcher,
+and actual in-game testing. A green CI workflow is not proof that a mission
+can be finished or progress saved correctly.
+
+### Testing the server without game assets
+
+On Linux (or any system with a C++23 compiler and Python 3):
+
+```bash
+g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/ability_selection_test.cpp -o /tmp/ability_selection_test
+/tmp/ability_selection_test
+g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/cooldown_math_test.cpp -o /tmp/cooldown_math_test
+/tmp/cooldown_math_test
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+See the [CI workflows](.github/workflows/) for full server builds and
+[BUILD.md](BUILD.md) for manual compilation. Build artifacts are available
+from individual successful GitHub Actions runs.
+
+---
 The server application of the Resurrection Capsule project, which can be used to mimic the functionalities of the original servers used to play Darkspore, including HTTP APIs, Blaze, RakNet and SporeNet.
 
 This server is a part of the Resurrection Capsule project, and will not work if used on its own. In order to get all the needed parts of the project, check our [central repository](https://github.com/vitor251093/resurrection-capsule).
