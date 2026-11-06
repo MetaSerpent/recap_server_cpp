@@ -177,31 +177,22 @@ CPMAddPackage(
     GIT_TAG 6b27c94ba4e3f3fc2d7a7d173123edc8af0c9380
     DOWNLOAD_ONLY YES)
 if(raknet_ADDED)
+    # This historical source snapshot does not contain RakNet's old Lib
+    # subdirectory. Build its core networking implementation directly rather
+    # than applying a patch intended for the deleted ZIP distribution.
     set(RAKNET_SOURCE_DIR "${raknet_SOURCE_DIR}/server/libs/raknet-3.902-mod")
-    set(RAKNET_PATCH "${CMAKE_CURRENT_LIST_DIR}/cmake/patches/RakNet-3.902.patch")
-    # Reject patch drift explicitly, instead of proceeding with unpatched RakNet.
-    execute_process(COMMAND git init
-        WORKING_DIRECTORY "${RAKNET_SOURCE_DIR}"
-        RESULT_VARIABLE RAKNET_INIT_RESULT
-        OUTPUT_QUIET)
-    if(NOT RAKNET_INIT_RESULT EQUAL 0)
-        message(FATAL_ERROR "Unable to prepare RakNet patch directory")
+    file(GLOB RAKNET_SOURCES CONFIGURE_DEPENDS "${RAKNET_SOURCE_DIR}/Source/*.cpp")
+    if(NOT RAKNET_SOURCES)
+        message(FATAL_ERROR "Pinned RakNet 3.902 source tree has no C++ sources")
     endif()
-    execute_process(COMMAND git apply --check --ignore-whitespace "${RAKNET_PATCH}"
-        WORKING_DIRECTORY "${RAKNET_SOURCE_DIR}"
-        RESULT_VARIABLE RAKNET_PATCH_CHECK)
-    if(NOT RAKNET_PATCH_CHECK EQUAL 0)
-        message(FATAL_ERROR "RakNet 3.902 source no longer matches the compatibility patch")
+    add_library(RakNetStatic STATIC ${RAKNET_SOURCES})
+    target_include_directories(RakNetStatic PUBLIC "${RAKNET_SOURCE_DIR}/Source")
+    if(WIN32)
+        target_link_libraries(RakNetStatic PUBLIC ws2_32)
+    else()
+        find_package(Threads REQUIRED)
+        target_link_libraries(RakNetStatic PUBLIC Threads::Threads)
     endif()
-    execute_process(COMMAND git apply --ignore-whitespace "${RAKNET_PATCH}"
-        WORKING_DIRECTORY "${RAKNET_SOURCE_DIR}"
-        RESULT_VARIABLE RAKNET_PATCH_RESULT)
-    if(NOT RAKNET_PATCH_RESULT EQUAL 0)
-        message(FATAL_ERROR "Unable to apply RakNet compatibility patch")
-    endif()
-    set(RAKNET_BUILD_SHARED OFF)
-    set(RAKNET_BUILD_STATIC ON)
-    add_subdirectory("${RAKNET_SOURCE_DIR}" "${raknet_BINARY_DIR}")
     target_link_libraries(recap_server PRIVATE RakNetStatic)
 endif()
 
