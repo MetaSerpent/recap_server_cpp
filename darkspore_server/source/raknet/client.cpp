@@ -104,11 +104,22 @@ namespace RakNet {
 	bool Client::SetGameState(GameState newState) {
 		bool result = mGameState == GameState::Invalid || IsValidStateChange(mGameState, newState);
 		if (result) {
+			if (newState != mGameState) {
+				mDungeonInitialized = false;
+			}
 			mGameState = newState;
 		} else {
 			std::cout << "Invalid state change from " << to_string(mGameState) << " to " << to_string(newState) << std::endl;
 		}
 		return result;
+	}
+
+	bool Client::MarkDungeonInitialized() {
+		if (mGameState != GameState::Dungeon || mDungeonInitialized) {
+			return false;
+		}
+		mDungeonInitialized = true;
+		return true;
 	}
 
 	SporeNet::UserPtr Client::GetUser() const {

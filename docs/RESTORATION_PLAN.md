@@ -16,6 +16,7 @@ Darkspore installation and launcher. Do not commit EA executable or assets.
 - Correct active cooldown extension/reduction to operate on remaining time and saturate uint32 client durations.
 - Join the data loading worker before server shutdown and close every instantiated service.
 - Normalize an empty STORAGE_PATH to the existing storage/ default.
+- Initialize each dungeon entry only once per client instead of repeating spawn and hero swaps on every debug ping.
 
 ## Verification matrix
 

@@ -54,6 +54,9 @@ namespace RakNet {
 			GameState GetGameState() const;
 			bool SetGameState(GameState newState);
 
+			// Returns true exactly once for each entry into Dungeon.
+			bool MarkDungeonInitialized();
+
 			SporeNet::UserPtr GetUser() const;
 			void SetUser(const SporeNet::UserPtr& user);
 
@@ -76,6 +79,7 @@ namespace RakNet {
 			GameStateData mGameStateData;
 
 			GameState mGameState = GameState::Invalid;
+			bool mDungeonInitialized = false;
 
 			friend class Server;
 	};

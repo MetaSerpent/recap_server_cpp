@@ -1086,6 +1086,11 @@ namespace RakNet {
 			}
 
 			case GameState::Dungeon: {
+				// The client sends subsequent pings throughout a level. Repeating
+				// initialization teleports heroes and resets the selected slot.
+				if (!client->MarkDungeonInitialized()) {
+					break;
+				}
 				// mGame.OnPlayerStart(player);
 				// SendChainGame(client, 2);
 
