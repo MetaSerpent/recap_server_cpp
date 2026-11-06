@@ -10,13 +10,21 @@ on:
       - main
       - develop
 
+# Drop superseded expensive builds when a newer commit lands on the branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
@@ -35,7 +43,7 @@ jobs:
       - name: Build
         run: |
           cd darkspore_server
-          cmake --build build
+          cmake --build build --parallel 2
           cmake -DCOMPONENT=recap_server -Pbuild/cmake_install.cmake
 
       - uses: actions/upload-artifact@v4

@@ -690,8 +690,11 @@ namespace RakNet {
 		Read<ActionCommandCommonData>(mInStream, command.data);
 
 		const auto& object = mGame.GetObjectManager().Get(command.data.objectId);
-		if (!object) {
-			// Could not find the object.
+		// Reject client actions against NPCs, another player's hero, or objects
+		// already scheduled for deletion. Each owned hero gets its player index
+		// in Player::SetCharacter, including inactive squad members.
+		if (!object || object->IsMarkedForDeletion() ||
+			!object->IsPlayerControlled() || object->GetPlayerIndex() != player->GetId()) {
 			return;
 		}
 #if 0

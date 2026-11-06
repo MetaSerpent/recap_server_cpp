@@ -12,6 +12,12 @@ OBJECTS = (ROOT / "darkspore_server/source/game/objectmanager.cpp").read_text()
 
 
 class ServerSafetyTests(unittest.TestCase):
+    def test_action_commands_cannot_control_foreign_or_enemy_objects(self):
+        handler = NET.split("void Server::OnActionCommandMsgs", 1)[1].split("void Server::OnChainPlayerMsgs", 1)[0]
+        self.assertIn("object->IsMarkedForDeletion()", handler)
+        self.assertIn("!object->IsPlayerControlled()", handler)
+        self.assertIn("object->GetPlayerIndex() != player->GetId()", handler)
+
     def test_queued_task_uses_player_id_not_first_connection(self):
         task = NET.split("void Server::add_client_task", 1)[1].split("void Server::", 1)[0]
         self.assertIn("const auto client = GetClient(id);", task)

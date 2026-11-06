@@ -4,6 +4,14 @@ on:
   push:
   pull_request:
 
+# Drop superseded expensive builds when a newer commit lands on the branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   ability-routing:
     runs-on: ubuntu-latest

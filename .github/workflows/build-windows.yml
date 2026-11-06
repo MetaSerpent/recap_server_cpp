@@ -10,6 +10,14 @@ on:
       - main
       - develop
 
+# Drop superseded expensive builds when a newer commit lands on the branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: windows-2022
@@ -50,7 +58,7 @@ jobs:
         run: |
           cd darkspore_server/build
           export PATH=/c/Users/runneradmin/nasm:$PATH
-          cmake --build . --config Release
+          cmake --build . --config Release --parallel 2
           cmake -DCOMPONENT=recap_server -Pcmake_install.cmake
 
       - name: Adding needed files
