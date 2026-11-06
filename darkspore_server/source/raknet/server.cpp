@@ -776,7 +776,9 @@ namespace RakNet {
 					combatData.unk[1] = command.ability.unk;
 					combatData.valueFromActionResponse = command.ability.userData;
 
-					mGame.UseAbility(object, combatData);
+					if (!mGame.UseAbility(object, combatData)) {
+						break;
+					}
 
 					auto targetObject = mGame.GetObjectManager().Get(command.ability.targetId);
 					if (targetObject) {
@@ -820,7 +822,9 @@ namespace RakNet {
 				combatData.unk[1] = command.ability.unk;
 				combatData.valueFromActionResponse = command.ability.userData;
 
-				mGame.UseAbility(object, combatData);
+				if (!mGame.UseAbility(object, combatData)) {
+					break; // Never acknowledge an action rejected by the Lua scheduler.
+				}
 
 				// Lua scripts manage their own cooldown updates. Avoid fabricating
 				// a 2-second cooldown or a completed boss/director state here.

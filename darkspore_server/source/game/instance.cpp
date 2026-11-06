@@ -499,20 +499,20 @@ namespace Game {
 		}
 	}
 
-	void Instance::UseAbility(const ObjectPtr& object, const RakNet::CombatData& combatData) {
-		if (!object) {
-			return;
-		}
-
-		if (object->HasCooldown(combatData.abilityId)) {
-			return;
+	bool Instance::UseAbility(const ObjectPtr& object, const RakNet::CombatData& combatData) {
+		if (!object || combatData.abilityId == 0 || object->HasCooldown(combatData.abilityId)) {
+			return false;
 		}
 
 		const auto& ability = mLua->GetAbility(combatData.abilityId);
-		if (ability) {
-			// ability:tick(object, target, cursorPosition, rank)
-			ability->Tick(object, mObjectManager->Get(combatData.targetId), combatData.cursorPosition, combatData.abilityRank);
+		if (!ability) {
+			return false;
 		}
+
+		// Tick returns false when the script is unavailable or the actor's
+		// existing Lua coroutine cannot accept another action.
+		return ability->Tick(object, mObjectManager->Get(combatData.targetId),
+			combatData.cursorPosition, combatData.abilityRank);
 	}
 
 	void Instance::SwapCharacter(const PlayerPtr& player, uint32_t creatureIndex) {
