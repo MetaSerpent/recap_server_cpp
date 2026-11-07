@@ -26,6 +26,10 @@ jobs:
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/cooldown_math_test.cpp -o /tmp/cooldown_math_test
           /tmp/cooldown_math_test
+      - name: Compile and test enemy AI gambit selection
+        run: |
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/ai_gambit_selection_test.cpp -o /tmp/ai_gambit_selection_test
+          /tmp/ai_gambit_selection_test
       - name: Compile and test mission progression
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/mission_progression_test.cpp -o /tmp/mission_progression_test

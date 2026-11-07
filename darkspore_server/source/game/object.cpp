@@ -2,6 +2,7 @@
 // Include
 #include "object.h"
 #include "cooldown_math.h"
+#include "ai_gambit_selection.h"
 #include "objectmanager.h"
 #include "instance.h"
 #include "catalyst.h"
@@ -422,7 +423,11 @@ namespace Game {
 			return;
 		}
 
-		const auto& aidefinition = mObject->GetNoun()->GetAIDefinition();
+		const auto& noun = mObject->GetNoun();
+		if (!noun) {
+			return;
+		}
+		const auto& aidefinition = noun->GetAIDefinition();
 		if (!aidefinition) {
 			return;
 		}
@@ -436,7 +441,9 @@ namespace Game {
 		UseAbility();
 
 		if (aidefinition->FaceTarget()) {
-			mObject->GetLocomotionData()->SetFacing(mTargetObject->GetPosition());
+			if (const auto& locomotion = mObject->GetLocomotionData()) {
+				locomotion->SetFacing(mTargetObject->GetPosition());
+			}
 		}
 	}
 
@@ -444,12 +451,17 @@ namespace Game {
 		if (mTargetObject && (mTargetObject->IsMarkedForDeletion() ||
 			mTargetObject->GetHealth() <= 0.f)) {
 			mTargetObject.reset();
+			mFirstAggro = false;
 		}
 		if (mTargetObject) {
 			return true;
 		}
 
-		const auto& data = mObject->GetNoun()->GetNonPlayerClassData();
+		const auto& noun = mObject->GetNoun();
+		if (!noun) {
+			return false;
+		}
+		const auto& data = noun->GetNonPlayerClassData();
 		if (!data) {
 			// If we don't have class data then we cannot have a target.
 			return false;
@@ -475,6 +487,10 @@ namespace Game {
 	}
 
 	bool AI::UseAbility(uint32_t id) {
+		if (id == 0 || !mTargetObject || mTargetObject->IsMarkedForDeletion() ||
+			mTargetObject->GetHealth() <= 0.f) {
+			return false;
+		}
 		if (!mObject->HasCooldown(id)) {
 			const auto& ability = mObject->GetGame().GetLua().GetAbility(id);
 			if (ability) {
@@ -485,7 +501,14 @@ namespace Game {
 	}
 
 	void AI::UseAbility() {
-		const auto& aidefinition = mObject->GetNoun()->GetAIDefinition();
+		const auto& noun = mObject->GetNoun();
+		if (!noun) {
+			return;
+		}
+		const auto& aidefinition = noun->GetAIDefinition();
+		if (!aidefinition) {
+			return;
+		}
 		const auto& nodes = aidefinition->GetNodes();
 		if (nodes.empty()) {
 			// No nodes, no AI.
@@ -507,6 +530,10 @@ namespace Game {
 		const auto& phase = node.GetPhaseData();
 		if (phase) {
 			const auto& gambit = phase->GetGambit();
+			if (gambit.empty()) {
+				mGambit = 0;
+				return;
+			}
 			switch (phase->GetType()) {
 				case PhaseType::PrioritizedList: {
 					for (const auto& gambitData : gambit) {
@@ -518,16 +545,16 @@ namespace Game {
 				}
 
 				case PhaseType::Sequential: {
+					mGambit = AIGambitSelection::NormalizeIndex(mGambit, gambit.size());
 					const auto& gambitData = gambit[mGambit];
 					if (UseAbility(gambitData.GetAbility())) {
-						mGambit++;
-						mGambit = mGambit == gambit.size() ? 0 : mGambit;
+						mGambit = AIGambitSelection::AdvanceIndex(mGambit, gambit.size());
 					}
 					break;
 				}
 
 				case PhaseType::Random: {
-					mGambit = utils::random::get<uint8_t>(0, static_cast<uint8_t>(gambit.size() - 1));
+					mGambit = utils::random::get<std::size_t>(0, gambit.size() - 1);
 
 					const auto& gambitData = gambit[mGambit];
 					UseAbility(gambitData.GetAbility());

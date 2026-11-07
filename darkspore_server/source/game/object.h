@@ -8,6 +8,7 @@
 #include "locomotion.h"
 #include "lua.h"
 
+#include <cstddef>
 #include <map>
 #include <tuple>
 
@@ -237,7 +238,7 @@ namespace Game {
 			ObjectPtr mTargetObject;
 
 			uint8_t mNode = 0;
-			uint8_t mGambit = 0;
+			std::size_t mGambit = 0;
 
 			bool mFirstAggro = false;
 	};
