@@ -231,10 +231,10 @@ namespace SporeNet {
 
 		if (secondary) {
 			mPrefixSecondaryAssetId = prefix;
-			mPrefixSecondaryAssetHash = utils::hash_id(prefix_string);
+			mPrefixSecondaryAssetHash = prefix != 0 ? utils::hash_id(prefix_string) : 0;
 		} else {
 			mPrefixAssetId = prefix;
-			mPrefixAssetHash = utils::hash_id(prefix_string);
+			mPrefixAssetHash = prefix != 0 ? utils::hash_id(prefix_string) : 0;
 		}
 	}
 
@@ -249,7 +249,7 @@ namespace SporeNet {
 		}
 
 		mSuffixAssetId = suffix;
-		mSuffixAssetHash = utils::hash_id(suffix_string);
+		mSuffixAssetHash = suffix != 0 ? utils::hash_id(suffix_string) : 0;
 	}
 
 	void Part::SetCreationDate(uint64_t timestamp) {

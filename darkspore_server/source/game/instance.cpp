@@ -40,6 +40,12 @@ namespace Game {
 		constexpr auto size = bytes_to_bits(0x2C8);
 
 		auto writeOffset = ReallocateStream(stream, size);
+		// ReallocateStream reserves space but does not initialize every
+		// field. Explicitly zero all padding and currently unsupported
+		// item slots before overlaying the known build-103 fields.
+		for (std::size_t i = 0; i < 0x2C8; ++i) {
+			Write<uint8_t>(stream, 0);
+		}
 
 		stream.SetWriteOffset(writeOffset + bytes_to_bits(0x00));
 		Write(stream, mPlanetsCompleted);
