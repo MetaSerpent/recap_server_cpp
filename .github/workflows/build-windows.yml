@@ -61,6 +61,15 @@ jobs:
           cmake --build . --config Release --parallel 2
           cmake -DCOMPONENT=recap_server -Pcmake_install.cmake
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Headless game APIs and registration persistence
+        shell: pwsh
+        run: |
+          python tests/headless_server_smoke.py --server darkspore_server/dist/bin/recap_server.exe --data darkspore_server/res/data
+
       - name: Smoke test command-line entry point
         run: |
           cd darkspore_server

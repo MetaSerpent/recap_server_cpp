@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 import http.client
 import json
+import os
+import shutil
 from pathlib import Path
 import socket
 import subprocess
@@ -115,7 +117,11 @@ def smoke(server: Path, data: Path) -> None:
         raise RuntimeError("Missing compiled server or bundled data directory")
     with tempfile.TemporaryDirectory(prefix="recap-headless-") as temp:
         cwd = Path(temp)
-        (cwd / "data").symlink_to(data, target_is_directory=True)
+        try:
+            (cwd / "data").symlink_to(data, target_is_directory=True)
+        except (NotImplementedError, OSError):
+            # Windows runners may forbid symlinks; keep the test portable.
+            shutil.copytree(data, cwd / "data")
         ports = dict(zip(PORT_KEYS, reserve_ports()))
         root = ET.Element("configs")
         for key, port in ports.items():
@@ -146,15 +152,16 @@ def smoke(server: Path, data: Path) -> None:
                 verify_registration_roundtrip(ports["SERVER_HTTP_PORT"], cwd)
                 proc.terminate()
                 code = proc.wait(timeout=20)
-                if code != 0:
+                if code != 0 and os.name != "nt":
                     raise RuntimeError(f"Headless server crashed on SIGTERM: exit={code}")
-                print("Headless server passed HTTP APIs, local account registration/persistence and clean shutdown")
+                print("Headless server passed HTTP APIs and local account registration/persistence"
+                      + (" and clean shutdown" if os.name != "nt" else " (Windows termination)"))
             finally:
                 if proc.poll() is None:
                     proc.kill()
                     proc.wait()
                 log.flush()
-                if proc.returncode != 0:
+                if proc.returncode != 0 and os.name != "nt":
                     log.seek(0)
                     print(log.read()[-6000:])
 
