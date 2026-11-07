@@ -39,7 +39,10 @@ A passing isolated test or C++ server build does not prove a playable game.
 
 The Windows/Ubuntu build workflows now smoke-test the installed server's
 `--version`, `--help`, and invalid `--darkspore-path` behavior before uploading
-artifacts. These entry-point checks require no proprietary game assets.
+artifacts. The headless smoke test also restarts the real server on the same
+temporary user directory, checks both accounts remain loadable with their
+original IDs, and rejects duplicate registration without changing files.
+These checks require no proprietary game assets.
 
 ## Reverse-engineering priorities
 

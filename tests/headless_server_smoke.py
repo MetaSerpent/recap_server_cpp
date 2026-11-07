@@ -17,7 +17,6 @@ import subprocess
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-import xml.etree.ElementTree as ET
 
 PORT_KEYS = (
     "SERVER_REDIRECTOR_PORT", "SERVER_BLAZE_PORT", "SERVER_PSS_PORT",
@@ -125,6 +124,85 @@ def verify_registration_roundtrip(port: int, cwd: Path) -> None:
         raise RuntimeError("Invalid avatar caused a partial account to be registered")
 
 
+
+def verify_restarted_server(server: Path, cwd: Path, port: int) -> None:
+    """Start a second real process against the previous account files.
+
+    Catches account state that exists only in memory, broken startup
+    deserialization, and accidental overwrite of user saves after restart.
+    """
+    account_paths = [
+        cwd / "storage/user/smoke@example.invalid.xml",
+        cwd / "storage/user/second@example.invalid.xml",
+    ]
+    before = {path: path.read_bytes() for path in account_paths}
+    with (cwd / "server-restart.log").open("w+", encoding="utf-8") as log:
+        proc = subprocess.Popen(
+            [str(server), "--darkspore-path", str(cwd / "missing-game-client")],
+            cwd=cwd, stdout=log, stderr=subprocess.STDOUT,
+        )
+        try:
+            deadline = time.monotonic() + 20
+            ready = False
+            while time.monotonic() < deadline:
+                if proc.poll() is not None:
+                    break
+                try:
+                    status, payload = query_server(
+                        port, "/recap/api?method=api.game.status"
+                    )
+                    if status == 200 and isinstance(
+                        json.loads(payload).get("enablePlayButton"), bool
+                    ):
+                        ready = True
+                        break
+                except (OSError, ValueError, http.client.HTTPException):
+                    time.sleep(0.1)
+            if not ready:
+                raise RuntimeError("Restarted server did not become HTTP-ready")
+
+            # Existing accounts must remain known across process boundaries.
+            for name, email in [
+                ("SmokePlayer", "smoke@example.invalid"),
+                ("SecondPlayer", "second@example.invalid"),
+            ]:
+                request = (
+                    "/recap/api?method=api.game.registration"
+                    f"&name={name}&email={email}&pass=ephemeral-password&avatar=0"
+                )
+                status, _ = query_server(port, request)
+                if status == 200:
+                    raise RuntimeError(
+                        f"Restarted server accepted duplicate registration: {email}"
+                    )
+            for path, original in before.items():
+                if path.read_bytes() != original:
+                    raise RuntimeError(
+                        f"Restart changed an existing persisted account: {path.name}"
+                    )
+
+            # Account XML should remain parseable and keep stable IDs.
+            ids = [
+                ET.parse(path).getroot().findtext("account/id")
+                for path in account_paths
+            ]
+            if not all(ids) or ids[0] == ids[1]:
+                raise RuntimeError("Persisted account identities changed after restart")
+            proc.terminate()
+            result = proc.wait(timeout=20)
+            if result != 0 and os.name != "nt":
+                raise RuntimeError(
+                    f"Restarted headless server crashed on SIGTERM: exit={result}"
+                )
+            print("Second server process reloaded accounts without data loss")
+        finally:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait()
+            if proc.returncode != 0 and os.name != "nt":
+                log.seek(0)
+                print(log.read()[-6000:])
+
 def smoke(server: Path, data: Path) -> None:
     server, data = server.resolve(), data.resolve()
     if not server.is_file() or not data.is_dir():
@@ -178,6 +256,9 @@ def smoke(server: Path, data: Path) -> None:
                 if proc.returncode != 0 and os.name != "nt":
                     log.seek(0)
                     print(log.read()[-6000:])
+
+        # Verify the same account files survive a completely new process.
+        verify_restarted_server(server, cwd, ports["SERVER_HTTP_PORT"])
 
 
 if __name__ == "__main__":
