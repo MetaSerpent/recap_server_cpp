@@ -441,6 +441,10 @@ namespace Game {
 	}
 
 	bool AI::SearchForTarget() {
+		if (mTargetObject && (mTargetObject->IsMarkedForDeletion() ||
+			mTargetObject->GetHealth() <= 0.f)) {
+			mTargetObject.reset();
+		}
 		if (mTargetObject) {
 			return true;
 		}
@@ -456,7 +460,8 @@ namespace Game {
 		const auto searchRadius = data->GetAggroRange();
 		const auto& objects = objectManager.GetObjectsInRadius(BoundingSphere(mObject->GetPosition(), searchRadius), { NounType::Creature });
 		for (const auto& possibleTarget : objects) {
-			if (possibleTarget->IsPlayerControlled()) {
+			if (possibleTarget->IsPlayerControlled() && !possibleTarget->IsMarkedForDeletion() &&
+				possibleTarget->GetHealth() > 0.f) {
 				mTargetObject = possibleTarget;
 				break;
 			}
@@ -756,6 +761,11 @@ namespace Game {
 	}
 
 	void Object::OnTick(float deltaTime) {
+		// Dead combatants may remain in the world as visible corpses,
+		// but must not move, run passive skills or issue further AI actions.
+		if (HasCombatantData() && mCombatantData->mCorpseState != CorpseState::Alive) {
+			return;
+		}
 		if (mLocomotionData) {
 			mLocomotionData->Update(deltaTime);
 		}
@@ -1629,13 +1639,17 @@ if (health <= 0) {
 	}
 
 	void Object::OnDeath() {
-		//
+		if (HasCombatantData()) {
+			mCombatantData->mCorpseState = CorpseState::Unknown;
+			SetFlags(GetFlags() | Flags::UpdateCombatant);
+		}
 	}
 
 	void Object::OnResurrect() {
 		// Set corpse state to "Not dead"
 		if (HasCombatantData()) {
 			mCombatantData->mCorpseState = CorpseState::Alive;
+			SetFlags(GetFlags() | Flags::UpdateCombatant);
 		}
 
 		// If we have a noun then...

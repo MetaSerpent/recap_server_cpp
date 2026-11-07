@@ -262,6 +262,7 @@ namespace Game {
 		if (!object) {
 			return;
 		}
+		object->OnDeath();
 
 		SendObjectGfxState(object, utils::hash_id("dead"));
 
