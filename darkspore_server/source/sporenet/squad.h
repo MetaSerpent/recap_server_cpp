@@ -18,6 +18,7 @@ namespace SporeNet {
 
 			const std::array<uint32_t, 3>& GetCreatureIds() const;
 			void SetCreatureId(uint8_t index, uint32_t id);
+			void SetCreatureIds(const std::array<uint32_t, 3>& ids, bool pvp);
 
 			const std::string GetName() const;
 			const std::string GetCategory() const;
@@ -31,7 +32,7 @@ namespace SporeNet {
 			void Update(const std::string& creatureStringList, bool pvp);
 
 		private:
-			std::array<uint32_t, 3> mCreatureIds;
+			std::array<uint32_t, 3> mCreatureIds{};
 
 			std::string mName;
 			std::string mCategory;

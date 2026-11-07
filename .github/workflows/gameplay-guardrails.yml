@@ -38,6 +38,10 @@ jobs:
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/auth_token_test.cpp -o /tmp/auth_token_test
           /tmp/auth_token_test
+      - name: Compile and test squad input parsing
+        run: |
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/squad_selection_test.cpp -o /tmp/squad_selection_test
+          /tmp/squad_selection_test
       - name: Compile and test account file identifiers
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/account_filename_test.cpp -o /tmp/account_filename_test

@@ -1,6 +1,7 @@
 
 // Include
 #include "user.h"
+#include "squad_selection.h"
 #include "account_filename.h"
 #include "instance.h"
 
@@ -239,7 +240,7 @@ namespace SporeNet {
 
 	SquadPtr User::GetSquadById(uint32_t id) const {
 		for (const auto& squad : mSquads) {
-			if (squad->GetId() == id) {
+			if (squad && squad->GetId() == id) {
 				return squad;
 			}
 		}
@@ -259,35 +260,24 @@ namespace SporeNet {
 		squad3->Reset(3);
 	}
 
-	void User::UpdateSquad(uint32_t slot, const std::string& creatureStringList, bool pvp) {
+	bool User::UpdateSquad(uint32_t slot, const std::string& creatureStringList, bool pvp) {
 		auto squad = GetSquadById(slot);
-		if (!squad) {
-			// Squad doesn't exist.
-			return;
+		if (!squad || squad->IsLocked()) {
+			return false;
 		}
-
-		auto creatureIds = utils::explode_string(creatureStringList, ',');
-
-		uint8_t creatureIndex = 0;
-		for (const auto& idString : creatureIds) {
-			auto id = utils::to_number<uint32_t>(idString);
-			if (id == 0) {
-				continue;
-			}
-
-			auto creature = mCreatures.Get(id);
-			if (creature) {
-				squad->SetCreatureId(creatureIndex++, creature->GetId());
-			}
-			/*
-			else {
-				auto templateCreature = SporeNet::Get().GetTemplateDatabase().Get(id);
-				if (templateCreature) {
-
-				}
-			}
-			*/
+		const auto ids = SquadSelection::ParseCreatureIds(creatureStringList);
+		if (!ids) {
+			return false;
 		}
+		// Validate every member before mutating the squad. Zero represents
+		// an intentionally empty slot, preserving its position.
+		for (const auto creatureId : *ids) {
+			if (creatureId != 0 && !mCreatures.Get(creatureId)) {
+				return false;
+			}
+		}
+		squad->SetCreatureIds(*ids, pvp);
+		return true;
 	}
 
 	bool User::UnlockUpgrade(uint32_t unlockId) {

@@ -32,6 +32,7 @@
 #include <chrono>
 #include <charconv>
 #include <vector>
+#include <optional>
 
 /*
 	A bunch of stuff used in the client
@@ -1884,18 +1885,42 @@ version = 1
 
 	void API::game_deck_updateDecks(HTTP::Session& session, HTTP::Response& response) {
 		const auto& user = session.get_user();
-		if (!user) {
-			// TODO: Error, no user logged in.
-			return;
+		const auto& request = session.get_request();
+		bool success = user != nullptr;
+
+		if (user) {
+			const auto pveSlot = request.uri.parameter<uint32_t>("pve_active_slot");
+			const auto pvpSlot = request.uri.parameter<uint32_t>("pvp_active_slot");
+			const auto pveCreatures = request.uri.parameter("pve_creatures");
+			const auto pvpCreatures = request.uri.parameter("pvp_creatures");
+			const auto pveSquad = user->GetSquadById(pveSlot);
+			const auto pvpSquad = user->GetSquadById(pvpSlot);
+			const auto beforePve = pveSquad ? std::optional<SporeNet::Squad>(*pveSquad) : std::nullopt;
+			const auto beforePvp = pvpSquad ? std::optional<SporeNet::Squad>(*pvpSquad) : std::nullopt;
+
+			// Empty parameters mean the client is leaving that deck unchanged.
+			if (!pveCreatures.empty()) {
+				success = user->UpdateSquad(pveSlot, pveCreatures, false);
+			}
+			if (success && !pvpCreatures.empty()) {
+				success = user->UpdateSquad(pvpSlot, pvpCreatures, true);
+			}
+			if (success && (!pveCreatures.empty() || !pvpCreatures.empty())) {
+				success = user->Save();
+			}
+			if (!success) {
+				// Roll back both decks together on invalid input or disk failures.
+				if (beforePve) {
+					*pveSquad = *beforePve;
+				}
+				if (beforePvp) {
+					*pvpSquad = *beforePvp;
+				}
+			}
 		}
 
-		const auto& request = session.get_request();
-		user->UpdateSquad(request.uri.parameter<uint32_t>("pve_active_slot"), request.uri.parameter("pve_creatures"), false);
-		user->UpdateSquad(request.uri.parameter<uint32_t>("pvp_active_slot"), request.uri.parameter("pvp_creatures"), true);
-
 		auto [document, docResponse] = create_xml_response();
-		add_common_keys(docResponse);
-
+		add_common_keys(docResponse, success);
 		set_response_body(response, document, boost::beast::http::status::ok);
 	}
 

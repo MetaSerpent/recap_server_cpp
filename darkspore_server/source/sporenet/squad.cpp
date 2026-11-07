@@ -23,14 +23,15 @@ namespace SporeNet {
 		mSlot = utils::xml_get_text_node<uint32_t>(node, "slot");
 
 		mLocked = utils::xml_get_text_node<uint32_t>(node, "locked");
+		mCreatureIds.fill(0);
 
 		if (auto creaturesNode = node.child("creatures")) {
 			size_t count = 0;
 			for (const auto& creatureNode : creaturesNode.children()) {
-				mCreatureIds[count++] = creatureNode.attribute("id").as_uint();
 				if (count >= mCreatureIds.size()) {
 					break;
 				}
+				mCreatureIds[count++] = creatureNode.attribute("id").as_uint();
 			}
 		}
 
@@ -63,6 +64,11 @@ namespace SporeNet {
 		}
 	}
 
+	void Squad::SetCreatureIds(const std::array<uint32_t, 3>& ids, bool pvp) {
+		mCreatureIds = ids;
+		mCategory = pvp ? "pvp" : "pve";
+	}
+
 	const std::string Squad::GetName() const {
 		return mName;
 	}
@@ -84,6 +90,7 @@ namespace SporeNet {
 	}
 
 	void Squad::Reset(uint32_t slot) {
+		mCreatureIds.fill(0);
 		mId = slot;
 		mSlot = mId;
 		mName = "Slot " + std::to_string(mSlot);
