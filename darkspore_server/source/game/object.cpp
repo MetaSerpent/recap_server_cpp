@@ -1515,17 +1515,14 @@ namespace Game {
 		float health = GetHealth();
 
 		SetHealth(health + value);
-		if (value > 0) {
-
-
-// Check if we should resurrect.
-if (health <= 0) {
-	// SendResurrectEvent();
-	OnResurrect();
-}
+		if (value > 0.f && health <= 0.f && GetHealth() > 0.f) {
+			// Revive only when the heal actually restored positive health.
+			OnResurrect();
 		}
 
-		float remainder = std::max<float>(0.f, health - maxHealth);
+		// Healing above maximum health is capped by SetHealth; measure any
+		// overflow against the requested value, not the pre-heal health.
+		float remainder = std::max<float>(0.f, health + value - maxHealth);
 		if (remainder > 0 && GetPlayerIndex() != 0xFF) {
 			DistributeDamageAmongSquad(remainder);
 		}

@@ -1110,7 +1110,10 @@ namespace RakNet {
 				// SendChainGame(client, 2);
 
 				mGame.OnPlayerStart(player);
-				mGame.SwapCharacter(player, 1);
+				// Preserve the selected hero instead of forcing the second slot.
+				if (player->GetCharacterObject(player->GetCurrentDeckIndex())) {
+					mGame.SwapCharacter(player, player->GetCurrentDeckIndex());
+				}
 				break;
 			}
 		}

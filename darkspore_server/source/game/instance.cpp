@@ -657,6 +657,9 @@ namespace Game {
 			}
 
 			auto object = mObjectManager->Create(utils::hash_id(dropRarityNouns[containerType]));
+			if (!object) {
+				continue;
+			}
 			object->SetPosition(position);
 			object->SetInteractableState(0);
 			
@@ -727,10 +730,12 @@ namespace Game {
 				serverEvent.mTargetPoint = position;
 
 				const auto& object = mObjectManager->Create(orbType);
-				object->SetPosition(position);
-
-				SendObjectCreate(object);
-				SendServerEvent(serverEvent);
+				if (object) {
+					object->SetPosition(position);
+					if (SendObjectCreate(object)) {
+						SendServerEvent(serverEvent);
+					}
+				}
 			}
 		}
 
@@ -749,6 +754,9 @@ namespace Game {
 			Catalyst catalyst(CatalystType::AttackSpeed, CatalystRarity::Common, false);
 
 			const auto& object = mObjectManager->Create(catalyst.GetNounId());
+			if (!object) {
+				return;
+			}
 			object->SetPosition(position);
 
 			const auto& lootData = object->CreateLootData();
@@ -838,6 +846,9 @@ namespace Game {
 			Catalyst catalyst(static_cast<CatalystType>(i), static_cast<CatalystRarity>(i % 3), i & 1);
 
 			auto object = mObjectManager->Create(catalyst.GetNounId());
+			if (!object) {
+				continue;
+			}
 			object->SetPosition(position);
 			object->SetInteractableState(0);
 
@@ -957,8 +968,11 @@ namespace Game {
 		auto newFlags = flags;
 
 		for (const auto& [_, client] : mServer->GetClients()) {
+			if (!client) {
+				continue;
+			}
 			const auto& player = client->GetPlayer();
-			if (object == player->GetDeployedCharacterObject()) {
+			if (player && object == player->GetDeployedCharacterObject()) {
 				player->SyncCharacterData();
 			}
 
