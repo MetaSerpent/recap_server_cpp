@@ -1542,9 +1542,13 @@ namespace Game {
 
 		auto [document, docResponse] = create_xml_response();
 		if (user) {
-			auto unlockId = request.uri.parameter<uint32_t>("unlock_id");
+			const auto unlockId = request.uri.parameter<uint32_t>("unlock_id");
+			const auto previousAccount = user->get_account();
 			success = user->UnlockUpgrade(unlockId);
-
+			if (success && !user->Save()) {
+				user->get_account() = previousAccount;
+				success = false;
+			}
 			user->get_account().Write(docResponse);
 		}
 
@@ -1751,20 +1755,31 @@ namespace Game {
 
 	void API::game_creature_unlockCreature(HTTP::Session& session, HTTP::Response& response) {
 		const auto& request = session.get_request();
-
 		auto [document, docResponse] = create_xml_response();
-		add_common_keys(docResponse);
-
 		const auto& user = session.get_user();
+		bool success = false;
+		uint32_t creatureId = 0;
 		if (user) {
-			auto templateId = request.uri.parameter<uint32_t>("template_id");
-			auto creatureId = user->UnlockCreature(templateId);
-
-			utils::xml_add_text_node(docResponse, "creature_id", creatureId);
-		} else {
-			// Send some error
+			const auto templateId = request.uri.parameter<uint32_t>("template_id");
+			const auto previousRewards = user->get_account().creatureRewards;
+			creatureId = user->UnlockCreature(templateId);
+			if (creatureId != 0) {
+				success = user->Save();
+				if (!success) {
+					// A failed account write must not spend rewards or grant a
+					// creature that disappears when the server restarts.
+					user->get_account().creatureRewards = previousRewards;
+					auto& creatures = user->get_creatures().data();
+					if (!creatures.empty() && creatures.back() &&
+						creatures.back()->GetId() == creatureId) {
+						creatures.pop_back();
+					}
+					creatureId = 0;
+				}
+			}
 		}
-
+		add_common_keys(docResponse, success);
+		utils::xml_add_text_node(docResponse, "creature_id", creatureId);
 		set_response_body(response, document, boost::beast::http::status::ok);
 	}
 
