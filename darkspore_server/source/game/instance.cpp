@@ -196,14 +196,14 @@ namespace Game {
 		return mLevelLoaded;
 	}
 
-	bool Instance::PrepareNextPlanet(uint8_t requestingPlayer) {
+	bool Instance::PrepareNextPlanet(uint8_t requestingPlayer, bool startNewChain) {
 		// The complete planet is still cash-out eligible. The client may
 		// explicitly request another deployment instead of cashing out.
 		// Campaign planet order follows the bundled levelNames table until
 		// the real chain vote-selection protocol is reconstructed.
 		if (!mServer || !mChainData.IsCompleted() ||
-			!Progression::CanDeployNextPlanet(
-				mChainData.GetProgression(), mChainData.GetLevelIndex())) {
+			(!startNewChain && !Progression::CanDeployNextPlanet(
+				mChainData.GetProgression(), mChainData.GetLevelIndex()))) {
 			return false;
 		}
 		for (const auto& [_, client] : mServer->GetClients()) {
@@ -245,8 +245,15 @@ namespace Game {
 		}
 		mGameStarted = false;
 		mLevelLoaded = false;
-		mChainData.SetCompleted(false);
-		mChainData.SetLevelByIndex(mChainData.GetLevelIndex() + 1);
+		if (startNewChain) {
+			// Cash-out followed by a fresh lobby deployment begins a new
+			// run, not another planet of the previous completed chain.
+			mChainData = RakNet::ChainVoteData{};
+			mCashOutData = CashOutData{};
+		} else {
+			mChainData.SetCompleted(false);
+			mChainData.SetLevelByIndex(mChainData.GetLevelIndex() + 1);
+		}
 		mObjectManager = std::make_unique<ObjectManager>(*this);
 		mLua = std::make_unique<Lua>(*this);
 		mLua->Initialize();
@@ -254,8 +261,8 @@ namespace Game {
 		mGameStartTime = utils::get_milliseconds();
 		mGameTime = mGameStartTime;
 		mGameTimeLua = mGameStartTime;
-		// mCashOutData is deliberately retained across planets; it stores
-		// the chain's accumulated rewards, not this dungeon's counters.
+		// The current chain retains its accumulated medals; a new chain
+		// starts with an empty result payload.
 		return true;
 	}
 

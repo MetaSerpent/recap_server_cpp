@@ -121,7 +121,7 @@ namespace Game {
 
 			bool IsLevelLoaded() const;
 			bool LoadLevel();
-			bool PrepareNextPlanet(uint8_t requestingPlayer);
+			bool PrepareNextPlanet(uint8_t requestingPlayer, bool startNewChain);
 
 			MarkerPtr GetMarker(uint32_t id) const;
 

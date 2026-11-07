@@ -1170,12 +1170,16 @@ namespace RakNet {
 			return;
 		}
 
-		// After a completed dungeon the old world must not be reused.
-		// A solo chain can deploy its next campaign planet, keeping the
-		// accumulated results; multiplayer vote coordination is deferred.
-		if (client->GetGameState() == GameState::ChainVoting &&
-			mGame.GetChainData().IsCompleted() &&
-			!mGame.PrepareNextPlanet(client->GetId())) {
+		// Only lobby or chain-vote clients can request a deployment.
+		const auto state = client->GetGameState();
+		if (state != GameState::Spaceship && state != GameState::ChainVoting) {
+			return;
+		}
+		// Never reuse the previously completed world's objects. A new
+		// lobby deployment starts a fresh chain, whereas an eligible
+		// chain vote continues into the next campaign planet.
+		if (mGame.GetChainData().IsCompleted() &&
+			!mGame.PrepareNextPlanet(client->GetId(), state == GameState::Spaceship)) {
 			return;
 		}
 

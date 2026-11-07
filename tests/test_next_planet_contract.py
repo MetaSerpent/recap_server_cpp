@@ -32,7 +32,9 @@ class NextPlanetContracts(unittest.TestCase):
             "std::make_unique<ObjectManager>(*this)", "mLua->Initialize();",
         ]:
             self.assertIn(line, stage)
-        self.assertNotIn("mCashOutData = CashOutData{}", stage)
+        self.assertIn("if (startNewChain)", stage)
+        self.assertIn("mChainData = RakNet::ChainVoteData{};", stage)
+        self.assertIn("mCashOutData = CashOutData{};", stage)
         self.assertIn("state != GameState::Spaceship && state != GameState::ChainCashOut", stage)
         self.assertIn("object.reset();", PLAYER)
 
@@ -40,8 +42,10 @@ class NextPlanetContracts(unittest.TestCase):
         start = SERVER.split("void Server::PrepareGameStart(", 1)[1].split(
             "void Server::SendHelloPlayer(", 1
         )[0]
-        self.assertLess(start.index("mGame.PrepareNextPlanet(client->GetId())"),
+        self.assertLess(start.index("mGame.PrepareNextPlanet(client->GetId(),"),
                         start.index("player->SetSquad(squad);"))
+        self.assertIn("state != GameState::Spaceship && state != GameState::ChainVoting", start)
+        self.assertIn("state == GameState::Spaceship", start)
 
     def test_chain_medals_accumulate_once_per_player_per_planet(self):
         beam = INSTANCE.split("void Instance::BeamOut(", 1)[1].split(
