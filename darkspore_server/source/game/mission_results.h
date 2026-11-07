@@ -53,6 +53,29 @@ namespace Game::MissionResults {
         return static_cast<std::uint32_t>(amount);
     }
 
+    struct RarityBoundaries {
+        std::uint32_t upper = 0; // Rarified+Purified threshold
+        std::uint32_t lower = 0; // Purified-only threshold
+    };
+
+    // Client tooltip weights: bronze=1, silver=3, gold=6.
+    // The original level 5-1 (index 17) unlocks a limited Purified band.
+    // These are packet presentation boundaries, not item awards.
+    constexpr RarityBoundaries CashOutRarityBoundaries(
+        std::uint32_t completedIndex, std::uint32_t planetsCompleted,
+        MedalCounts medals) noexcept {
+        if (planetsCompleted == 0) {
+            return {};
+        }
+        const std::uint64_t weighted = std::uint64_t{medals.bronze} +
+            3ULL * medals.silver + 6ULL * medals.gold;
+        const auto upper = static_cast<std::uint32_t>(
+            weighted / planetsCompleted > 100 ? 100 : weighted / planetsCompleted);
+        const auto lower = completedIndex >= 17 ?
+            (upper / 5 > 10 ? 10U : upper / 5) : 0U;
+        return {upper, lower};
+    }
+
     // Adding rewards cannot wrap the persistent account's uint32_t DNA.
     constexpr std::uint32_t AddDna(std::uint32_t current,
                                    std::uint32_t reward) noexcept {

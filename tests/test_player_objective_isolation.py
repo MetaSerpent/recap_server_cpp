@@ -42,7 +42,7 @@ class PlayerObjectiveIsolation(unittest.TestCase):
         code = GAME.split("void Instance::BeamOut(", 1)[1].split(
             "bool Instance::SendObjectCreate(", 1
         )[0]
-        self.assertIn("mCashOutData.mDna = 0.f;", code)
+        self.assertIn("mCashOutData.mDna = 0;", code)
         self.assertIn("MissionResults::CountMedals(", code)
         self.assertNotIn("mCashOutData.mDna = 50;", code)
 

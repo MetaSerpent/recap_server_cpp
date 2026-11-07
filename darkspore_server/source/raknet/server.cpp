@@ -918,14 +918,11 @@ namespace RakNet {
 					if (!user) {
 						break;
 					}
-					const float reward = mGame.GetCashOutData().GetDna();
-					if (!std::isfinite(reward) || reward < 0.f || reward >= 4294967296.f) {
-						break;
-					}
+					const uint32_t reward = mGame.GetCashOutData().GetDna();
 					auto& account = user->get_account();
 					const auto previousDna = account.dna;
 					account.dna = Game::MissionResults::AddDna(
-						account.dna, static_cast<uint32_t>(reward));
+						account.dna, reward);
 					if (!user->Save()) {
 						account.dna = previousDna;
 						break;

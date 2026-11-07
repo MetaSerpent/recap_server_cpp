@@ -42,15 +42,39 @@ namespace Game {
 		Write(stream, mPlanetsCompleted);
 		Write(stream, mDna);
 
+		stream.SetWriteOffset(writeOffset + bytes_to_bits(0x14));
+		for (const auto xp : mStartingExperiences) { Write(stream, xp); }
+		for (const auto xp : mFinalExperiences) { Write(stream, xp); }
+
 		stream.SetWriteOffset(writeOffset + bytes_to_bits(0x34));
 		for (const auto medalCount : mGoldMedals) { Write(stream, medalCount); }
 		for (const auto medalCount : mSilverMedals) { Write(stream, medalCount); }
 		for (const auto medalCount : mBronzeMedals) { Write(stream, medalCount); }
 
+		// Recovered 103 client boundaries are the upper Rarified/Purified
+		// percentage and the lower Purified percentage, respectively.
 		stream.SetWriteOffset(writeOffset + bytes_to_bits(0x64));
-		for (const auto chance : mUniqueChances) { Write(stream, chance); }
-		for (const auto chance : mRareChances) { Write(stream, chance); }
+		for (const auto value : mUpperRarityBoundaries) { Write(stream, value); }
+		for (const auto value : mLowerRarityBoundaries) { Write(stream, value); }
 
+		stream.SetWriteOffset(writeOffset + bytes_to_bits(0x84));
+		for (const auto value : mDailyBonuses) { Write(stream, value); }
+		for (std::size_t player = 0; player < mRewards.size(); ++player) {
+			for (std::size_t item = 0; item < mRewards[player].size(); ++item) {
+				const auto& reward = mRewards[player][item];
+				constexpr std::size_t rowSize = 0x90;
+				constexpr std::size_t itemSize = 0x24;
+				const auto offset = 0x88 + rowSize * player + itemSize * item + 0x08;
+				stream.SetWriteOffset(writeOffset + bytes_to_bits(offset));
+				Write(stream, reward.rigblock);
+				Write(stream, reward.suffix);
+				Write(stream, reward.prefix);
+				Write(stream, reward.secondaryPrefix);
+				Write(stream, reward.level);
+				Write(stream, reward.rarity);
+				Write(stream, reward.roll);
+			}
+		}
 		stream.SetWriteOffset(writeOffset + size);
 	}
 
@@ -1183,7 +1207,7 @@ namespace Game {
 			// No verified formula for extra DNA at mission cash-out.
 			// Regular loot is already persisted on pickup. Do not generate
 			// invented DNA whenever a client reports successful beam-out.
-			mCashOutData.mDna = 0.f;
+			mCashOutData.mDna = 0;
 			mCashOutData.mPlanetsCompleted = mChainData.GetProgression();
 			// Associate each of the four wire slots with a player index.
 			// This slot mapping still needs validation against client captures;
@@ -1195,9 +1219,16 @@ namespace Game {
 				mCashOutData.mGoldMedals[index] += totals.gold;
 				mCashOutData.mSilverMedals[index] += totals.silver;
 				mCashOutData.mBronzeMedals[index] += totals.bronze;
+				const auto bands = MissionResults::CashOutRarityBoundaries(
+					mChainData.GetLevelIndex(), mCashOutData.mPlanetsCompleted,
+					{mCashOutData.mGoldMedals[index],
+					 mCashOutData.mSilverMedals[index],
+					 mCashOutData.mBronzeMedals[index]});
+				mCashOutData.mUpperRarityBoundaries[index] = bands.upper;
+				mCashOutData.mLowerRarityBoundaries[index] = bands.lower;
 			}
-			// Rare/unique drop probabilities have not been reconstructed:
-			// leave them zero rather than reporting fictitious percentages.
+			// Item reward generation is still missing. The player receives
+			// accurate rarity boundaries but no fabricated item-card records.
 
 			mServer->SendReconnectPlayer(client, GameState::ChainVoting);
 			mServer->SendDebugPing(client);

@@ -82,22 +82,35 @@ namespace Game {
 		std::string id;
 	};
 
-	// CashOutData
+	// CashOutData: 0x2C8 byte chain cash-out packet (client build 103).
 	class CashOutData {
 		public:
 			void WriteTo(RakNet::BitStream& stream) const;
-			float GetDna() const { return mDna; }
+			uint32_t GetDna() const { return mDna; }
 
 		private:
+			struct Reward {
+				uint32_t rigblock = 0;
+				uint32_t suffix = 0;
+				uint32_t prefix = 0;
+				uint32_t secondaryPrefix = 0;
+				int32_t level = 0;
+				int32_t rarity = 0;
+				int32_t roll = 0;
+			};
+
+			std::array<uint32_t, 4> mStartingExperiences {};
+			std::array<uint32_t, 4> mFinalExperiences {};
 			std::array<uint32_t, 4> mGoldMedals {};
 			std::array<uint32_t, 4> mSilverMedals {};
 			std::array<uint32_t, 4> mBronzeMedals {};
-			std::array<uint32_t, 4> mUniqueChances {};
-			std::array<uint32_t, 4> mRareChances {};
+			std::array<uint32_t, 4> mUpperRarityBoundaries {};
+			std::array<uint32_t, 4> mLowerRarityBoundaries {};
+			std::array<uint8_t, 4> mDailyBonuses {};
+			std::array<std::array<Reward, 4>, 4> mRewards {};
 
 			uint32_t mPlanetsCompleted = 0;
-
-			float mDna = 0;
+			uint32_t mDna = 0;
 
 			friend class Instance;
 	};
