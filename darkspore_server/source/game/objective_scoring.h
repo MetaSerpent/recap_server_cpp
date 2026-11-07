@@ -14,6 +14,15 @@ namespace Game::ObjectiveScoring {
                elapsedSeconds <= 900 ? 3 :
                elapsedSeconds <= 1200 ? 2 : 1;
     }
+
+    // Original objective_Obelisks.lua: count distinct accessed obelisks.
+    // Gold=3, Silver=2, Bronze=1, Failed=0.
+    constexpr std::uint8_t ScoreTouchedObelisks(
+        std::uint64_t count) noexcept {
+        return count >= 3 ? 4 :
+               count >= 2 ? 3 :
+               count >= 1 ? 2 : 1;
+    }
 }
 
 #endif

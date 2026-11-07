@@ -90,6 +90,7 @@ namespace Game {
 		mMarkers.clear();
 		mPlayerSpawnpoints.clear();
 		mEnemyClearTracker.Reset();
+		mTouchedObelisks.clear();
 		for (auto& objective : mObjectives) {
 			objective.value = 0;
 			objective.medal = RakNet::ObjectiveMedal::InProgress;
@@ -634,6 +635,40 @@ namespace Game {
 			 interactableData->GetTimesUsed() >= interactableData->GetUsesAllowed())) {
 			return;
 		}
+		// The original objective_Obelisks.lua handles distinct
+		// InteractWithObelisk actions, counting each object only once.
+		if (interactableData &&
+			interactableData->GetAbility() == utils::hash_id("InteractWithObelisk")) {
+			if (!mTouchedObelisks.insert(objectId).second) {
+				return;
+			}
+			interactableData->SetTimesUsed(interactableData->GetTimesUsed() + 1);
+			if (mServer) {
+				for (const auto& [_, client] : mServer->GetClients()) {
+					if (client) {
+						mServer->SendInteractableDataUpdate(client, object, *interactableData);
+					}
+				}
+			}
+			for (std::size_t i = 0; i < mObjectives.size(); ++i) {
+				auto& objective = mObjectives[i];
+				if (objective.id == utils::hash_id("TouchAllObelisks")) {
+					objective.value = static_cast<uint32_t>(
+						std::min<std::size_t>(mTouchedObelisks.size(), UINT32_MAX));
+					if (mServer) {
+						for (const auto& [_, client] : mServer->GetClients()) {
+							if (client) {
+								mServer->SendObjectiveUpdate(client, static_cast<uint8_t>(i),
+									utils::hash_id("vo_ship_obelisk_accessed"));
+							}
+						}
+					}
+					break;
+				}
+			}
+			return;
+		}
+
 		switch (noun->GetType()) {
 			case NounType::Loot:
 				PickupLoot(player, object);
@@ -970,6 +1005,11 @@ namespace Game {
 					objective.value = mEnemyClearTracker.GetKillPercent();
 					objective.medal = static_cast<RakNet::ObjectiveMedal>(
 						mEnemyClearTracker.GetMedal());
+				} else if (objective.id == utils::hash_id("TouchAllObelisks")) {
+					objective.value = static_cast<uint32_t>(
+						std::min<std::size_t>(mTouchedObelisks.size(), UINT32_MAX));
+					objective.medal = static_cast<RakNet::ObjectiveMedal>(
+						ObjectiveScoring::ScoreTouchedObelisks(mTouchedObelisks.size()));
 				}
 			}
 			// Inform the client about final objectives before it leaves the
