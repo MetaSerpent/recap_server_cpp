@@ -8,6 +8,7 @@
 #include "catalyst.h"
 #include "scheduler.h"
 #include "mission_progression.h"
+#include "objective_scoring.h"
 
 #include "raknet/server.h"
 #include "sporenet/instance.h"
@@ -71,9 +72,9 @@ namespace Game {
 		for (const auto& objectiveName : objectiveTypes) {
 			decltype(auto) objective = mObjectives.emplace_back();
 			objective.id = utils::hash_id(objectiveName);
-			objective.value = 1;
-			objective.medal = RakNet::ObjectiveMedal::Gold;
-			objective.description = "Do some stuff bruh";
+			objective.value = 0;
+			objective.medal = RakNet::ObjectiveMedal::InProgress;
+			objective.description = std::string(objectiveName);
 		}
 	}
 
@@ -88,6 +89,11 @@ namespace Game {
 		mLevelLoaded = false;
 		mMarkers.clear();
 		mPlayerSpawnpoints.clear();
+		for (auto& objective : mObjectives) {
+			objective.value = 0;
+			objective.medal = RakNet::ObjectiveMedal::InProgress;
+		}
+		mCashOutData = CashOutData{};
 
 		mObjectManager = std::make_unique<ObjectManager>(*this);
 		mLua = std::make_unique<Lua>(*this);
@@ -322,6 +328,13 @@ namespace Game {
 		}
 		if (!mGameStarted) {
 			return;
+		}
+		if (initializeWorld) {
+			// Score the mission from actual dungeon entry, never from the
+			// earlier server startup or time spent waiting in the lobby.
+			mGameStartTime = utils::get_milliseconds();
+			mGameTime = mGameStartTime;
+			mGameTimeLua = mGameStartTime;
 		}
 
 		// Shared enemies, obelisks and markers must be spawned once per
@@ -915,6 +928,17 @@ namespace Game {
 		}
 		const auto& client = mServer->GetClient(player->GetId());
 		if (client) {
+			// Exact scoring thresholds recovered from the bundled
+			// Objective_FinishLevelQuickly.lua: 600/900/1200 seconds.
+			if (!mObjectives.empty() &&
+				mObjectives.front().id == utils::hash_id("FinishLevelQuickly")) {
+				auto& speed = mObjectives.front();
+				const auto elapsedSeconds = GetTimeElapsed() / 1000;
+				speed.value = static_cast<uint32_t>(
+					std::min<uint64_t>(elapsedSeconds, UINT32_MAX));
+				speed.medal = static_cast<RakNet::ObjectiveMedal>(
+					ObjectiveScoring::ScoreFinishLevelQuickly(elapsedSeconds));
+			}
 			// Inform the client about final objectives before it leaves the
 			// dungeon. Cash-out data is handled by the subsequent vote.
 			mServer->SendObjectivesComplete(client);
