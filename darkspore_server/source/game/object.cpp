@@ -233,6 +233,7 @@ namespace Game {
 	}
 
 	void LootData::SetPart(const SporeNet::Part& part) {
+		mPart = std::make_shared<SporeNet::Part>(part);
 		mRigblockAsset = part.GetRigblockAssetHash();
 		mSuffixAssetId = part.GetSuffixAssetHash();
 		mPrefixAssetId = part.GetPrefixAssetHash();
@@ -240,6 +241,10 @@ namespace Game {
 		mItemLevel = part.GetLevel();
 		mRarity = static_cast<int32_t>(part.GetRarity());
 		mObject->SetFlags(mObject->GetFlags() | Object::Flags::UpdateLootData);
+	}
+
+	const SporeNet::Part* LootData::GetPart() const {
+		return mPart.get();
 	}
 
 	void LootData::SetDNAAmount(float amount) {

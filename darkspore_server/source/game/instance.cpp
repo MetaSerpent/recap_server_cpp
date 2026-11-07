@@ -1086,15 +1086,29 @@ namespace Game {
 		if (!player || !object || object->IsMarkedForDeletion()) {
 			return;
 		}
-
-		if (!object->HasLootData()) {
+		const auto& lootData = object->GetLootData();
+		if (!lootData) {
 			return;
+		}
+
+		// Only equipment loot carries a persistent SporeNet::Part. Catalyst
+		// and resource pickups follow their own inventory pathways.
+		if (const auto* part = lootData->GetPart()) {
+			const auto& user = player->GetUser();
+			if (!user) {
+				return;
+			}
+			user->AddPart(*part);
+			if (!user->Save()) {
+				// Preserve the world loot and restore the in-memory inventory.
+				user->get_parts().data().pop_back();
+				return;
+			}
 		}
 		object->MarkForDeletion();
 
 		ClientEvent lootEvent;
-		lootEvent.SetLootPickup(player->GetId(), *object->GetLootData());
-
+		lootEvent.SetLootPickup(player->GetId(), *lootData);
 		for (const auto& [_, client] : mServer->GetClients()) {
 			mServer->SendServerEvent(client, lootEvent);
 		}

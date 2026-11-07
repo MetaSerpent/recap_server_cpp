@@ -122,6 +122,7 @@ namespace Game {
 			void SetInstanceId(uint64_t id);
 
 			void SetPart(const SporeNet::Part& part);
+			const SporeNet::Part* GetPart() const;
 			void SetDNAAmount(float amount);
 			void SetCatalyst(const Catalyst& catalyst);
 
@@ -130,6 +131,9 @@ namespace Game {
 
 		private:
 			ObjectPtr mObject;
+			// Preserve the actual acquired part for the inventory save. Hashes
+			// sent to the client are insufficient to reconstruct an item.
+			std::shared_ptr<SporeNet::Part> mPart;
 
 			uint64_t mId = 0;
 			uint64_t mInstanceId = 0;
