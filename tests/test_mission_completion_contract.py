@@ -20,7 +20,7 @@ class MissionCompletionContract(unittest.TestCase):
         )[0]
         self.assertIn("client->GetGameState() == GameState::ChainVoting", block)
         self.assertIn("SendReconnectPlayer(client, GameState::ChainCashOut);", block)
-        self.assertIn("SendChainCashOutMessages(client, 1);", block)
+        self.assertIn("SendChainCashOutMessages(client, 0);", block)
 
     def test_cashout_saves_before_acknowledging_and_rolls_back(self):
         block = SERVER.split("void Server::OnChainPlayerMsgs(", 1)[1].split(

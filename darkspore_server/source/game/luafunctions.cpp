@@ -28,36 +28,44 @@ namespace {
 	}
 
 	auto LuaGetPlayer(const Game::Instance& instance, sol::object& value) {
-		Game::PlayerPtr result;
-		if (value.valid()) {
-			result = value.as<Game::PlayerPtr>();
-			if (!result) {
-				result = instance.GetPlayerByIndex(value.as<uint8_t>());
-			}
+		// Original decompiled Lua passes numeric player IDs as well as
+		// object userdata. Never attempt an incompatible sol::as<T>.
+		if (!value.valid() || value == sol::nil) {
+			return Game::PlayerPtr{};
 		}
-		return result;
+		if (value.is<Game::PlayerPtr>()) {
+			return value.as<Game::PlayerPtr>();
+		}
+		if (value.is<uint8_t>()) {
+			return instance.GetPlayerByIndex(value.as<uint8_t>());
+		}
+		return Game::PlayerPtr{};
 	}
 
 	auto LuaGetObject(const Game::ObjectManager& objectManager, sol::object& value) {
-		Game::ObjectPtr result;
-		if (value.valid()) {
-			result = value.as<Game::ObjectPtr>();
-			if (!result) {
-				result = objectManager.Get(value.as<uint32_t>());
-			}
+		if (!value.valid() || value == sol::nil) {
+			return Game::ObjectPtr{};
 		}
-		return result;
+		if (value.is<Game::ObjectPtr>()) {
+			return value.as<Game::ObjectPtr>();
+		}
+		if (value.is<uint32_t>()) {
+			return objectManager.Get(value.as<uint32_t>());
+		}
+		return Game::ObjectPtr{};
 	}
 
 	auto LuaGetTrigger(const Game::ObjectManager& objectManager, sol::object& value) {
-		Game::TriggerVolumePtr result;
-		if (value.valid()) {
-			result = value.as<Game::TriggerVolumePtr>();
-			if (!result) {
-				result = objectManager.GetTrigger(value.as<uint32_t>());
-			}
+		if (!value.valid() || value == sol::nil) {
+			return Game::TriggerVolumePtr{};
 		}
-		return result;
+		if (value.is<Game::TriggerVolumePtr>()) {
+			return value.as<Game::TriggerVolumePtr>();
+		}
+		if (value.is<uint32_t>()) {
+			return objectManager.GetTrigger(value.as<uint32_t>());
+		}
+		return Game::TriggerVolumePtr{};
 	}
 
 	auto LuaGetServerEvent(const Game::ObjectManager& objectManager, const sol::table& value) {

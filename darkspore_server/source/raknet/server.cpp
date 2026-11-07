@@ -929,7 +929,7 @@ namespace RakNet {
 					}
 					SendChainVoteMessages(client, value);
 					SendReconnectPlayer(client, GameState::ChainCashOut);
-					SendChainCashOutMessages(client, 1);
+					SendChainCashOutMessages(client, 0);
 				}
 				break;
 			}
@@ -1106,7 +1106,7 @@ namespace RakNet {
 			}
 
 			case GameState::ChainCashOut: {
-				SendChainCashOutMessages(client, 1);
+				SendChainCashOutMessages(client, 0);
 				break;
 			}
 
@@ -2126,8 +2126,10 @@ namespace RakNet {
 		BitStream outStream(8);
 		outStream.Write(PacketID::ChainCashOutMsgs);
 
+		// Client build 103 expects subtype 0 followed by the 0x2C8
+		// cash-out result payload. Subtype 1 is not the full receipt.
 		Write<uint8_t>(outStream, value);
-		if (value != 0) {
+		if (value == 0) {
 			mGame.GetCashOutData().WriteTo(outStream);
 			// WriteDebugData(outStream, 0x2C8);
 		}
