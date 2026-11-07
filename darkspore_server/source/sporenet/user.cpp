@@ -227,11 +227,15 @@ namespace SporeNet {
 	}
 
 	uint32_t User::UnlockCreature(uint32_t templateId) {
-		if (mAccount.creatureRewards > 0) {
-			mAccount.creatureRewards--;
-			return mCreatures.Add(templateId);
+		if (mAccount.creatureRewards == 0) {
+			return 0;
 		}
-		return 0;
+		// Unknown templates must not consume earned creature rewards.
+		const auto creatureId = mCreatures.Add(templateId);
+		if (creatureId != 0) {
+			--mAccount.creatureRewards;
+		}
+		return creatureId;
 	}
 
 	const std::vector<SquadPtr>& User::GetSquads() const {

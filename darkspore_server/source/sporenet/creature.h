@@ -239,6 +239,8 @@ namespace SporeNet {
 			std::vector<Stats> mStats;
 
 			TemplateCreaturePtr mTemplate;
+			// Retain the original template name even when its data is missing.
+			std::string mTemplateName;
 
 			std::string mPngLargeUrl;
 			std::string mPngThumbUrl;

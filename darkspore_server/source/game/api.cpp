@@ -1837,7 +1837,7 @@ version = 1
 		const auto& uri = request.uri;
 
 		auto [document, docResponse] = create_xml_response();
-		add_common_keys(docResponse);
+		bool success = false;
 
 		const auto& user = session.get_user();
 		if (user) {
@@ -1845,6 +1845,7 @@ version = 1
 			auto creature = user->GetCreatureById(creature_id);
 			if (creature) {
 				auto version = creature->GetVersion();
+				const auto previousCreature = *creature;
 
 				// save large/thumb images
 				std::string storagePath = Config::Get(CONFIG_STORAGE_PATH) + "creature_png/";
@@ -1873,13 +1874,18 @@ version = 1
 					uri.parameter("stats_ability_keyvalues")
 				);
 
-				auto creatureNode = docResponse.append_child("creature");
-				utils::xml_add_text_node(docResponse, "version", version);
+				success = user->Save();
+				if (success) {
+					docResponse.append_child("creature");
+					utils::xml_add_text_node(docResponse, "version", version);
+				} else {
+					// Keep server memory consistent with the durable player save.
+					*creature = previousCreature;
+				}
 			}
-		} else {
-			// TODO: Error, no user logged in.
 		}
 
+		add_common_keys(docResponse, success);
 		set_response_body(response, document, boost::beast::http::status::ok);
 	}
 

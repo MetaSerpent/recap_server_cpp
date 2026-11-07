@@ -389,11 +389,12 @@ namespace SporeNet {
 
 	// Creature
 	Creature::Creature(const TemplateCreaturePtr& templateCreature)
-		: mTemplate(templateCreature) {}
+		: mTemplate(templateCreature),
+		  mTemplateName(templateCreature ? templateCreature->GetName() : std::string()) {}
 
 	void Creature::Read(const pugi::xml_node& node) {
-		auto templateName = node.attribute("template").as_string();
-		mTemplate = SporeNet::Get().GetTemplateDatabase().Get(templateName);
+		mTemplateName = node.attribute("template").as_string();
+		mTemplate = SporeNet::Get().GetTemplateDatabase().Get(mTemplateName);
 
 		mId = utils::xml_get_text_node<uint32_t>(node, "id");
 		mVersion = utils::xml_get_text_node<uint32_t>(node, "version");
@@ -403,10 +404,32 @@ namespace SporeNet {
 
 		mPngLargeUrl = utils::xml_get_text_node(node, "png_large_url");
 		mPngThumbUrl = utils::xml_get_text_node(node, "png_thumb_url");
+
+		mStats.clear();
+		if (const auto statsNode = node.child("custom_stats")) {
+			for (const auto statNode : statsNode.children("stat")) {
+				Stats stat{};
+				stat.statName = statNode.attribute("name").as_string();
+				stat.maxValue = statNode.attribute("max").as_uint();
+				stat.currentValue = statNode.attribute("current").as_uint();
+				mStats.push_back(std::move(stat));
+			}
+		}
+		mAbilityStats.clear();
+		if (const auto abilityNode = node.child("custom_ability_stats")) {
+			for (const auto entry : abilityNode.children("ability")) {
+				AbilityStat stat{};
+				stat.key = entry.attribute("key").as_string();
+				stat.token = entry.attribute("token").as_string();
+				stat.value = entry.attribute("value").as_string();
+				mAbilityStats.push_back(std::move(stat));
+			}
+		}
 	}
 
 	void Creature::Write(pugi::xml_node& node) const {
-		node.append_attribute("template").set_value(mTemplate->GetName().c_str());
+		node.append_attribute("template").set_value(
+			mTemplate ? mTemplate->GetName().c_str() : mTemplateName.c_str());
 
 		utils::xml_add_text_node(node, "id", mId);
 		utils::xml_add_text_node(node, "version", mVersion);
@@ -414,6 +437,22 @@ namespace SporeNet {
 		utils::xml_add_text_node(node, "item_points", mItemPoints);
 		utils::xml_add_text_node(node, "png_large_url", mPngLargeUrl);
 		utils::xml_add_text_node(node, "png_thumb_url", mPngThumbUrl);
+		if (auto statsNode = node.append_child("custom_stats")) {
+			for (const auto& stat : mStats) {
+				auto entry = statsNode.append_child("stat");
+				entry.append_attribute("name").set_value(stat.statName.c_str());
+				entry.append_attribute("max").set_value(stat.maxValue);
+				entry.append_attribute("current").set_value(stat.currentValue);
+			}
+		}
+		if (auto abilityNode = node.append_child("custom_ability_stats")) {
+			for (const auto& stat : mAbilityStats) {
+				auto entry = abilityNode.append_child("ability");
+				entry.append_attribute("key").set_value(stat.key.c_str());
+				entry.append_attribute("token").set_value(stat.token.c_str());
+				entry.append_attribute("value").set_value(stat.value.c_str());
+			}
+		}
 	}
 
 	void Creature::WriteApi(pugi::xml_node& node, bool profile_data, bool include_abilities, bool include_parts) const {
@@ -427,7 +466,20 @@ namespace SporeNet {
 			node.remove_child("stats_template");
 
 			utils::xml_add_text_node(node, "creator_id", mCreatorId);
-			utils::xml_add_text_node(node, "stats", "TODO");
+			std::string statsString;
+			for (const auto& stat : mStats) {
+				if (!statsString.empty()) statsString += ';';
+				statsString += stat.statName + ',' + std::to_string(stat.maxValue) +
+					',' + std::to_string(stat.currentValue);
+			}
+			utils::xml_add_text_node(node, "stats", statsString);
+
+			std::string abilityString;
+			for (const auto& stat : mAbilityStats) {
+				if (!abilityString.empty()) abilityString += ';';
+				abilityString += stat.token + '!' + stat.value;
+			}
+			utils::xml_add_text_node(node, "stats_ability_keyvalues", abilityString);
 
 			// stats_ability_keyvalues (uses template by default if this doesnt exist)
 		} else {
