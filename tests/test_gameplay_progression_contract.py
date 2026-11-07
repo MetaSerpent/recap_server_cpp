@@ -41,7 +41,7 @@ class GameplayRegressionTests(unittest.TestCase):
         self.assertLess(block.index("if (!lootData)"), block.index("object->MarkForDeletion();"))
 
     def test_catalyst_bounds_and_death_transition(self):
-        self.assertIn("if (index >= mCatalysts.size())", self.player)
+        self.assertIn("if (!IsValidCatalystSlot(index))", self.player)
         self.assertIn("healthBeforeHit > 0.f && GetHealth() <= 0.f", self.object)
 
 
