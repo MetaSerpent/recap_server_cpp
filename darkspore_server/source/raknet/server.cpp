@@ -663,12 +663,19 @@ namespace RakNet {
 			}
 
 			case 0x08: {
-				auto& gameStateData = client->GetGameStateData();
-				gameStateData.state = static_cast<uint32_t>(GameState::Dungeon);
-				gameStateData.type = Blaze::GameType::Chain;
-
+				// A forged or reordered status must not put the replicated
+				// game state into Dungeon while the RakNet client remains in
+				// Spaceship/ChainVoting/CashOut.
+				if (client->GetGameState() != GameState::PreDungeon) {
+					break;
+				}
 				SendGameStart(client);
-				SendDebugPing(client);
+				if (client->GetGameState() == GameState::Dungeon) {
+					auto& gameStateData = client->GetGameStateData();
+					gameStateData.state = static_cast<uint32_t>(GameState::Dungeon);
+					gameStateData.type = Blaze::GameType::Chain;
+					SendDebugPing(client);
+				}
 				break;
 			}
 
@@ -929,6 +936,10 @@ namespace RakNet {
 					}
 					SendChainVoteMessages(client, value);
 					SendReconnectPlayer(client, GameState::ChainCashOut);
+					SendChainCashOutMessages(client, 0);
+				} else if (value == 4 && client->GetGameState() == GameState::ChainCashOut) {
+					// Native ChainPlayerRequestCashOutData (4) is a receipt
+					// resend, never another reward settlement.
 					SendChainCashOutMessages(client, 0);
 				}
 				break;
