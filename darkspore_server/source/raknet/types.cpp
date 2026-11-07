@@ -1091,7 +1091,7 @@ namespace RakNet {
 	}
 
 	std::string_view ChainVoteData::GetName() const {
-		return levelNames[mLevelIndex];
+		return mLevelIndex < levelNames.size() ? levelNames[mLevelIndex] : std::string_view{};
 	}
 
 	uint32_t ChainVoteData::GetLevel() const {
@@ -1124,7 +1124,9 @@ namespace RakNet {
 	}
 
 	void ChainVoteData::SetLevelInstance(uint32_t index) {
-		mLevelIndex = index;
+		if (index < levelNames.size()) {
+			mLevelIndex = index;
+		}
 	}
 
 	uint32_t ChainVoteData::GetMarkerSet() const {

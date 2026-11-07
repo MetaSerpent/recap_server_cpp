@@ -7,6 +7,7 @@
 #include "serverevent.h"
 #include "catalyst.h"
 #include "scheduler.h"
+#include "mission_progression.h"
 
 #include "raknet/server.h"
 #include "sporenet/instance.h"
@@ -851,16 +852,21 @@ namespace Game {
 	}
 
 	void Instance::BeamOut(const PlayerPtr& player) {
-		if (!player || !mServer) {
+		if (!player || !mServer || !mGameStarted || !mLevelLoaded) {
 			return;
 		}
 		const auto& client = mServer->GetClient(player->GetId());
 		if (client) {
-			mChainData.SetCompleted(true);
-			mChainData.SetProgression(1);
-
+			// A repeated beam-out status packet must not count the same planet
+			// multiple times. The run is limited to five planets.
+			if (!mChainData.IsCompleted()) {
+				mChainData.SetProgression(Progression::CompletePlanet(mChainData.GetProgression()));
+				mChainData.SetCompleted(true);
+			}
+			// Reward algorithms are still unverified; keep their existing
+			// placeholders, but report the number of planets actually completed.
 			mCashOutData.mDna = 50;
-			mCashOutData.mPlanetsCompleted = 2;
+			mCashOutData.mPlanetsCompleted = mChainData.GetProgression();
 			mCashOutData.mGoldMedals.fill(3);
 			mCashOutData.mSilverMedals.fill(1);
 			mCashOutData.mBronzeMedals.fill(4);
