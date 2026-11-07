@@ -1277,7 +1277,9 @@ namespace Game {
 			// inventory/account write fails.
 			account.lastCashOutReceiptId = previousReceiptId;
 			account.dna = previousDna;
-			user->get_parts().data().resize(initialPartCount);
+			while (user->get_parts().data().size() > initialPartCount) {
+				user->get_parts().data().pop_back();
+			}
 			return false;
 		}
 		// Publish only a successful durable receipt to the client.

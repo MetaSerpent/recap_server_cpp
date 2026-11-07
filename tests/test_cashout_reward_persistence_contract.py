@@ -31,7 +31,8 @@ class CashOutRewardPersistence(unittest.TestCase):
             "user->AddPart(part);", "if (!user->Save())",
             "account.lastCashOutReceiptId = previousReceiptId;",
             "account.dna = previousDna;",
-            "user->get_parts().data().resize(initialPartCount);",
+            "while (user->get_parts().data().size() > initialPartCount)",
+            "user->get_parts().data().pop_back();",
             "mCashOutData.mRewards[slot] = receiptItems;",
         ]:
             self.assertIn(key, method)
