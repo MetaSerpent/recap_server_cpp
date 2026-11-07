@@ -16,7 +16,7 @@ class CashOutSubtypeAndLuaResolution(unittest.TestCase):
         self.assertIn("if (value == 0)", sender)
         self.assertNotIn("if (value != 0)", sender)
         self.assertIn("mGame.GetCashOutData().WriteTo(outStream);", sender)
-        self.assertEqual(SERVER.count("SendChainCashOutMessages(client, 0);"), 2)
+        self.assertEqual(SERVER.count("SendChainCashOutMessages(client, 0);"), 3)
         self.assertNotIn("SendChainCashOutMessages(client, 1);", SERVER)
 
     def test_numeric_lua_ids_do_not_require_userdata_conversions(self):
