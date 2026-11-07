@@ -1170,6 +1170,15 @@ namespace RakNet {
 			return;
 		}
 
+		// After a completed dungeon the old world must not be reused.
+		// A solo chain can deploy its next campaign planet, keeping the
+		// accumulated results; multiplayer vote coordination is deferred.
+		if (client->GetGameState() == GameState::ChainVoting &&
+			mGame.GetChainData().IsCompleted() &&
+			!mGame.PrepareNextPlanet(client->GetId())) {
+			return;
+		}
+
 		auto& gameStateData = client->GetGameStateData();
 		gameStateData.state = static_cast<uint32_t>(GameState::PreDungeon);
 

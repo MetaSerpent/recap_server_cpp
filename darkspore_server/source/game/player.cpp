@@ -252,6 +252,14 @@ namespace Game {
 		return mSquad;
 	}
 
+	void Player::ClearDungeonObjects() {
+		// Old world objects hold references to the previous ObjectManager.
+		// Release them before replacing that world between planets.
+		for (auto& object : mCharacterObjects) {
+			object.reset();
+		}
+	}
+
 	void Player::SetSquad(const SporeNet::SquadPtr& squad) {
 		mSquad = squad;
 

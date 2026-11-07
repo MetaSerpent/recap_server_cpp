@@ -121,6 +121,7 @@ namespace Game {
 
 			bool IsLevelLoaded() const;
 			bool LoadLevel();
+			bool PrepareNextPlanet(uint8_t requestingPlayer);
 
 			MarkerPtr GetMarker(uint32_t id) const;
 
@@ -228,6 +229,7 @@ namespace Game {
 			EnemyClearTracker mEnemyClearTracker;
 			DamageObjectives mDamageObjectives;
 			std::unordered_set<uint32_t> mTouchedObelisks;
+			std::unordered_set<uint8_t> mScoredPlayers;
 			std::vector<ObjectPtr> mObjects;
 			std::vector<glm::vec3> mPlayerSpawnpoints;
 

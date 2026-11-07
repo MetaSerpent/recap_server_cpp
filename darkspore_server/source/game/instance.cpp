@@ -93,6 +93,7 @@ namespace Game {
 		mEnemyClearTracker.Reset();
 		mDamageObjectives.Reset();
 		mTouchedObelisks.clear();
+		mScoredPlayers.clear();
 		for (auto& objective : mObjectives) {
 			objective.value = 0;
 			objective.medal = RakNet::ObjectiveMedal::InProgress;
@@ -193,6 +194,69 @@ namespace Game {
 		}
 
 		return mLevelLoaded;
+	}
+
+	bool Instance::PrepareNextPlanet(uint8_t requestingPlayer) {
+		// The complete planet is still cash-out eligible. The client may
+		// explicitly request another deployment instead of cashing out.
+		// Campaign planet order follows the bundled levelNames table until
+		// the real chain vote-selection protocol is reconstructed.
+		if (!mServer || !mChainData.IsCompleted() ||
+			!Progression::CanDeployNextPlanet(
+				mChainData.GetProgression(), mChainData.GetLevelIndex())) {
+			return false;
+		}
+		for (const auto& [_, client] : mServer->GetClients()) {
+			if (!client || client->GetId() == requestingPlayer) {
+				continue;
+			}
+			// Never discard another player's live dungeon or pending vote.
+			// Coordinated multiplayer chain voting requires a client trace.
+			const auto state = client->GetGameState();
+			if (state != GameState::Spaceship && state != GameState::ChainCashOut) {
+				return false;
+			}
+		}
+
+		// Cancel callbacks from the old dungeon before its Lua VM and
+		// ObjectManager become invalid.
+		for (uint32_t taskId : mEvents) {
+			GetApp().GetScheduler().CancelTask(taskId);
+		}
+		mEvents.clear();
+		for (const auto& [_, player] : mPlayers) {
+			if (player) {
+				player->ClearDungeonObjects();
+			}
+		}
+		mLua.reset();
+		mObjects.clear();
+		mObjectManager.reset();
+
+		mMarkers.clear();
+		mPlayerSpawnpoints.clear();
+		mEnemyClearTracker.Reset();
+		mDamageObjectives.Reset();
+		mTouchedObelisks.clear();
+		mScoredPlayers.clear();
+		for (auto& objective : mObjectives) {
+			objective.value = 0;
+			objective.medal = RakNet::ObjectiveMedal::InProgress;
+		}
+		mGameStarted = false;
+		mLevelLoaded = false;
+		mChainData.SetCompleted(false);
+		mChainData.SetLevelByIndex(mChainData.GetLevelIndex() + 1);
+		mObjectManager = std::make_unique<ObjectManager>(*this);
+		mLua = std::make_unique<Lua>(*this);
+		mLua->Initialize();
+
+		mGameStartTime = utils::get_milliseconds();
+		mGameTime = mGameStartTime;
+		mGameTimeLua = mGameStartTime;
+		// mCashOutData is deliberately retained across planets; it stores
+		// the chain's accumulated rewards, not this dungeon's counters.
+		return true;
 	}
 
 	MarkerPtr Instance::GetMarker(uint32_t id) const {
@@ -1069,6 +1133,11 @@ namespace Game {
 		}
 		const auto& client = mServer->GetClient(player->GetId());
 		if (client) {
+			// Count each player's final medals once per dungeon even if the
+			// client resends the completion status before transitioning.
+			if (!mScoredPlayers.insert(player->GetId()).second) {
+				return;
+			}
 			// Build final scores for this particular player. Global progress
 			// stays separate from per-player hit counters.
 			const auto objectives = GetObjectivesForPlayer(player->GetId(), true);
@@ -1093,9 +1162,9 @@ namespace Game {
 				const auto index = player->GetId();
 				const auto totals = MissionResults::CountMedals(
 					objectives, [](const auto& obj) { return static_cast<uint8_t>(obj.medal); });
-				mCashOutData.mGoldMedals[index] = totals.gold;
-				mCashOutData.mSilverMedals[index] = totals.silver;
-				mCashOutData.mBronzeMedals[index] = totals.bronze;
+				mCashOutData.mGoldMedals[index] += totals.gold;
+				mCashOutData.mSilverMedals[index] += totals.silver;
+				mCashOutData.mBronzeMedals[index] += totals.bronze;
 			}
 			// Rare/unique drop probabilities have not been reconstructed:
 			// leave them zero rather than reporting fictitious percentages.

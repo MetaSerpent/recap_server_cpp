@@ -104,6 +104,7 @@ namespace Game {
 
 			SporeNet::SquadPtr GetSquad() const;
 			void SetSquad(const SporeNet::SquadPtr& squad);
+			void ClearDungeonObjects();
 
 			const Character& GetCharacter(uint32_t index) const;
 

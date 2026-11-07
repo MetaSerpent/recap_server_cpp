@@ -21,7 +21,8 @@ Darkspore installation and launcher. Do not commit EA executable or assets.
 - Count distinct InteractWithObelisk actions, broadcast objective and interactable changes, and score from original Lua thresholds (3/2/1). Other scripted interactions still need reconstruction.
 - Track successful player-to-enemy damage per player and score DoDamageOften from Lua difficulty-scaled hit counts; score HugeDamage from Lua hit-count thresholds with provisional 1x health scaling until that multiplier is implemented.
 - Build objective snapshots per player for init/update/completion packets, so multiplayer damage counters cannot bleed across clients. Count actual medals from the same player snapshot.
-- Stop granting the unverified flat 50-DNA cash-out reward. Equipment loot remains saved on pickup; DNA drops and mission bonus rules still require reconstruction. Full end-of-mission reward formulas and loot chances still need reconstruction.
+- Stop granting the unverified flat 50-DNA cash-out reward. Equipment loot remains saved on pickup; DNA drops and mission bonus rules still require reconstruction.
+- Reset the old ObjectManager, Lua VM, markers, enemies and objective counters when an eligible player requests the next planet after completing a dungeon; accumulate per-player medal totals across planets and prevent duplicate completion tally. The server currently selects the next campaign level sequentially; actual vote-selection packets need verification. Refuse to reset while another player is in a live or uncommitted state. Full end-of-mission reward formulas and loot chances still need reconstruction.
 
 ## Verification matrix
 
