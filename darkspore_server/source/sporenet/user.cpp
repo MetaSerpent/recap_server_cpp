@@ -660,7 +660,7 @@ namespace SporeNet {
 		else {
 			user = std::make_shared<User>(name, username, password);
 
-			// The old srand(time(NULL))/rand() assigned identical IDs to
+			// Time-seeded global PRNG calls assigned identical IDs to
 			// accounts created within the same second.
 			uint32_t id = 0;
 			for (uint32_t attempt = 0; attempt < 16; ++attempt) {
