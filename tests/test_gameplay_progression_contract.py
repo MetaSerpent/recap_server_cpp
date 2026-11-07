@@ -34,7 +34,7 @@ class GameplayRegressionTests(unittest.TestCase):
         block = self.instance.split("void Instance::PickupLoot(", 1)[1].split(
             "void Instance::PickupCatalyst(", 1
         )[0]
-        self.assertLess(block.index("if (!object->HasLootData())"), block.index("object->MarkForDeletion();"))
+        self.assertLess(block.index("if (!lootData)"), block.index("object->MarkForDeletion();"))
 
     def test_catalyst_payload_checked_before_consuming_world_object(self):
         block = self.instance.split("void Instance::PickupCatalyst(", 1)[1]
