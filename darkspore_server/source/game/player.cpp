@@ -132,15 +132,22 @@ namespace Game {
 	}
 
 	uint32_t Player::GetAbilityRank(uint8_t creatureIndex, uint8_t abilityIndex) const {
-		if (creatureIndex >= 3) {
-			creatureIndex = 0;
+		if (!AbilitySelection::IsValidHeroSlot(creatureIndex, mCharacterData.size()) ||
+			!AbilitySelection::IsValidAbilityIndex(abilityIndex)) {
+			return 0;
 		}
-
-		const auto& characterData = mCharacterData[std::clamp<size_t>(creatureIndex, 0, mCharacterData.size() - 1)];
-		return characterData.mAbilityRanks[std::clamp<size_t>(abilityIndex, 0, 8)];
+		return mCharacterData[creatureIndex].mAbilityRanks[abilityIndex];
 	}
 
 	bool Player::IsAbilityLocked(uint8_t abilityIndex) const {
+		if (!AbilitySelection::IsValidAbilityIndex(abilityIndex)) {
+			return true;
+		}
+		// 0xFF means no tutorial/HUD ability lock is active. A direct
+		// index comparison would otherwise lock every ability by default.
+		if (mLockedAbilityMin == 0xFF) {
+			return false;
+		}
 		if (abilityIndex < mLockedAbilityMin) {
 			return true;
 		} else if (mLockedAbilityMin == 5) {

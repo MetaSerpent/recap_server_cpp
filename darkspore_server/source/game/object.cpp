@@ -2,6 +2,7 @@
 // Include
 #include "object.h"
 #include "cooldown_math.h"
+#include "ability_selection.h"
 #include "ai_gambit_selection.h"
 #include "objectmanager.h"
 #include "instance.h"
@@ -1572,9 +1573,11 @@ namespace Game {
 			return -9984;
 		}
 
-		if (rank > 7) {
-			// Rank cannot be higher than 7?
+		if (rank < 0 || rank > 7) {
 			return -9994;
+		}
+		if (!AbilitySelection::IsValidAbilityIndex(abilityIndex)) {
+			return -9988;
 		}
 
 		if (IsPlayerControlled()) {
