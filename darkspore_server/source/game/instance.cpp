@@ -1082,9 +1082,9 @@ namespace Game {
 			// placeholders, but report the number of planets actually completed.
 			mCashOutData.mDna = 50;
 			mCashOutData.mPlanetsCompleted = mChainData.GetProgression();
-			// Four wire slots correspond to player indices. Report real
-			// objective medal counts for the player who just completed the
-			// stage instead of broadcasting fabricated fixed awards.
+			// Associate each of the four wire slots with a player index.
+			// This slot mapping still needs validation against client captures;
+			// the medal counts themselves come from real objective results.
 			if (player->GetId() < mCashOutData.mGoldMedals.size()) {
 				const auto index = player->GetId();
 				mCashOutData.mGoldMedals[index] = 0;

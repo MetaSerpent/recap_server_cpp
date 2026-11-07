@@ -34,7 +34,7 @@ int main() {
     for (int i = 0; i < 15; ++i) scores.RecordHit(0, 36.f);
     assert(scores.ScoreHugeDamage(0) == 4);
 
-    for (int i = 0; i < 71; ++i) scores.RecordHit(0, 1.f);
+    for (int i = 0; i < 70; ++i) scores.RecordHit(0, 1.f);
     assert(scores.ScoreDamageOften(0, 0) == 3);
     for (int i = 0; i < 50; ++i) scores.RecordHit(0, 1.f);
     assert(scores.ScoreDamageOften(0, 0) == 4);

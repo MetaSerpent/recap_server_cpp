@@ -45,7 +45,7 @@ namespace Game {
             return GetCounters(id).hugeHits;
         }
 
-        static std::uint32_t DifficultyThreshold(std::uint32_t minimum,
+        static constexpr std::uint32_t DifficultyThreshold(std::uint32_t minimum,
                                                   std::uint32_t maximum,
                                                   std::uint32_t majorDifficulty) {
             const auto difficulty = std::min(majorDifficulty, 7U);
