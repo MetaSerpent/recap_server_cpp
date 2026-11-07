@@ -685,8 +685,12 @@ namespace SporeNet {
 
 		auto it = sUsersByEmail.find(username);
 		if (it != sUsersByEmail.end()) {
-			user = it->second;
-			alreadyLoggedIn = true;
+			// A cached session must not bypass password validation.
+			// Blaze accepts alreadyLoggedIn as a successful login.
+			if (it->second && it->second->get_password() == password) {
+				user = it->second;
+				alreadyLoggedIn = true;
+			}
 		} else {
 			user = std::make_shared<User>(username);
 			if (user->Load() && user->get_password() == password) {
@@ -727,8 +731,12 @@ namespace SporeNet {
 	}
 
 	UserPtr UserManager::GetUserByAuthToken(const std::string& authToken) const {
+		// Newly constructed users may have an empty token; it is never a credential.
+		if (authToken.empty()) {
+			return nullptr;
+		}
 		for (const auto& [_, user] : sUsersByEmail) {
-			if (user->get_auth_token() == authToken) {
+			if (user && !user->get_auth_token().empty() && user->get_auth_token() == authToken) {
 				return user;
 			}
 		}

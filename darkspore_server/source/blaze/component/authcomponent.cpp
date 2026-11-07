@@ -602,7 +602,7 @@ namespace Blaze {
 
 		const auto& user = SporeNet::Get().GetUserManager().GetUserByAuthToken(authToken);
 		if (!user) {
-			std::cout << "User with auth token '" << authToken << "' not found." << std::endl;
+			std::cout << "Silent login rejected: unknown authentication token." << std::endl;
 
 			request.reply(ErrorCode::AUTH_ERR_INVALID_USER);
 			return;
@@ -622,10 +622,10 @@ namespace Blaze {
 		std::string password = request["PASS"].GetString();
 		std::string personaName = request["PNAM"].GetString();
 
-		const auto& user = SporeNet::Get().GetUserManager().GetUserByEmail(username);
-		if (!user) {
-			std::cout << "User '" << username << "' not found." << std::endl;
-
+		// Express login was previously accepting any password for a cached account.
+		const auto& [user, success, alreadyLoggedIn] =
+			SporeNet::Get().GetUserManager().Login(username, password);
+		if (!user || (!success && !alreadyLoggedIn)) {
 			request.reply(ErrorCode::AUTH_ERR_INVALID_USER);
 			return;
 		}
