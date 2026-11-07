@@ -182,7 +182,7 @@ namespace Game {
 			void DropLoot(const ObjectPtr& object, const ObjectPtr& targetObject, DropType dropType);
 			void DropLoot();
 
-			void DropCatalyst(const PlayerPtr& player, uint32_t catalystSlot);
+			bool DropCatalyst(const PlayerPtr& player, uint32_t catalystSlot);
 			void DropCatalyst();
 
 			//

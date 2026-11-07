@@ -929,10 +929,10 @@ namespace RakNet {
 			return;
 		}
 
-		uint32_t crystalSlot;
+		uint32_t crystalSlot = 0xFFFFFFFF;
 		Read<uint32_t>(mInStream, crystalSlot);
 
-		uint32_t moveType;
+		uint32_t moveType = 0xFFFFFFFF;
 		Read<uint32_t>(mInStream, moveType);
 
 		uint32_t pickupTime;
@@ -944,11 +944,12 @@ namespace RakNet {
 		uint32_t unk;
 		Read<uint32_t>(mInStream, unk);
 
-		uint32_t newSlot;
+		uint32_t newSlot = 0xFFFFFFFF;
 		Read<uint32_t>(mInStream, newSlot);
 
 		const auto& creature = player->GetDeployedCharacterObject();
-		if (!creature) {
+		if (!creature || !player->IsValidCatalystSlot(crystalSlot) ||
+			((moveType == 1 || moveType == 2) && !player->IsValidCatalystSlot(newSlot))) {
 			SendCrystalMessage(client, 3, crystalSlot, 0, Game::Catalyst());
 			return;
 		}
@@ -962,8 +963,11 @@ namespace RakNet {
 		switch (moveType) {
 			// Move catalyst out of grid into the world (dropping it on the ground)
 			case 0: {
-				mGame.DropCatalyst(player, crystalSlot);
-				SendCrystalMessage(client, 2, crystalSlot, 0xFFFFFFFF, Game::Catalyst());
+				if (mGame.DropCatalyst(player, crystalSlot)) {
+					SendCrystalMessage(client, 2, crystalSlot, 0xFFFFFFFF, Game::Catalyst());
+				} else {
+					SendCrystalMessage(client, 3, crystalSlot, 0, Game::Catalyst());
+				}
 				break;
 			}
 

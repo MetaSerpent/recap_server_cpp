@@ -109,6 +109,7 @@ namespace Game {
 
 			uint32_t GetOpenCatalystSlot() const;
 			Catalyst GetCatalyst(uint32_t index) const;
+			bool IsValidCatalystSlot(uint32_t index) const;
 			void SetCatalyst(const Catalyst& crystal, uint32_t index);
 
 			uint16_t GetUpdateBits() const;

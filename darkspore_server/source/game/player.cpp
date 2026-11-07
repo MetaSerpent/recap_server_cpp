@@ -343,8 +343,12 @@ namespace Game {
 		return 0xFFFFFFFF;
 	}
 
+	bool Player::IsValidCatalystSlot(uint32_t index) const {
+		return index < mCatalysts.size();
+	}
+
 	Catalyst Player::GetCatalyst(uint32_t index) const {
-		if (index >= mCatalysts.size()) {
+		if (!IsValidCatalystSlot(index)) {
 			return Catalyst();
 		}
 		return mCatalysts[index];

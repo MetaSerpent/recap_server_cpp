@@ -760,40 +760,44 @@ namespace Game {
 		}
 	}
 
-	void Instance::DropCatalyst(const PlayerPtr& player, uint32_t catalystSlot) {
-		if (!player) {
-			return;
+	bool Instance::DropCatalyst(const PlayerPtr& player, uint32_t catalystSlot) {
+		if (!player || !mObjectManager || !mServer || !player->IsValidCatalystSlot(catalystSlot)) {
+			return false;
+		}
+		const auto characterObject = player->GetDeployedCharacterObject();
+		const auto catalyst = player->GetCatalyst(catalystSlot);
+		if (!characterObject || !catalyst) {
+			return false;
 		}
 
-		auto characterObject = player->GetDeployedCharacterObject();
-		if (!characterObject) {
-			return;
+		static uint64_t lootId = 0;
+		const auto object = mObjectManager->Create(catalyst.GetNounId());
+		if (!object) {
+			return false;
 		}
+		object->SetPosition(characterObject->GetPosition());
+		object->SetInteractableState(0);
 
-		auto catalyst = player->GetCatalyst(catalystSlot);
-		if (!catalyst) {
-			return;
+		const auto& lootData = object->CreateLootData();
+		lootData->SetId(++lootId);
+		lootData->SetCatalyst(catalyst);
+
+		const auto& interactableData = object->CreateInteractableData();
+		interactableData->SetUsesAllowed(1);
+		interactableData->SetTimesUsed(0);
+		interactableData->SetAbility(utils::hash_id("PickUpLoot"));
+
+		if (!SendObjectCreate(object)) {
+			object->MarkForDeletion();
+			return false;
 		}
-
+		for (const auto& [_, client] : mServer->GetClients()) {
+			mServer->SendLootDataUpdate(client, object, *lootData);
+			mServer->SendInteractableDataUpdate(client, object, *interactableData);
+		}
+		// Do not clear the inventory slot until its world item exists.
 		player->SetCatalyst(Catalyst(), catalystSlot);
-		{
-			static uint64_t lootId = 0;
-
-			auto object = mObjectManager->Create(catalyst.GetNounId());
-			object->SetPosition(characterObject->GetPosition());
-			object->SetInteractableState(0);
-
-			const auto& lootData = object->CreateLootData();
-			lootData->SetId(++lootId);
-			lootData->SetCatalyst(catalyst);
-
-			const auto& interactableData = object->CreateInteractableData();
-			interactableData->SetUsesAllowed(1);
-			interactableData->SetTimesUsed(0);
-			interactableData->SetAbility(utils::hash_id("PickUpLoot"));
-
-			SendObjectCreate(object);
-		}
+		return true;
 	}
 
 	void Instance::DropCatalyst() {
