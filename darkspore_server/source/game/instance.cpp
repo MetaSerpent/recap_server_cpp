@@ -90,6 +90,8 @@ namespace Game {
 
 		mServer->start(mData.hostNetwork.exip.port);
 		mGameStartTime = utils::get_milliseconds();
+		mGameTime = mGameStartTime;
+		mGameTimeLua = mGameStartTime;
 
 		mServer->add_task([this] {
 			mLua->Initialize();
@@ -457,12 +459,21 @@ namespace Game {
 				SendLabsPlayerUpdate(player);
 			}
 
-			const auto& client = mServer->GetClient(static_cast<uint8_t>(0));
-			if (client && !mObjectives.empty()) {
+			if (!mObjectives.empty()) {
 				auto& objective = mObjectives.front();
 				if (objective.id == utils::hash_id("FinishLevelQuickly")) {
-					objective.value = static_cast<uint32_t>(GetTimeElapsed() / 1000);
-					mServer->SendObjectiveUpdate(client, 0, utils::hash_id("vo_ship_obelisk_accessed"));
+					const auto seconds = static_cast<uint32_t>(
+						std::min<uint64_t>(GetTimeElapsed() / 1000, UINT32_MAX));
+					if (objective.value != seconds) {
+						objective.value = seconds;
+						// Timed objectives change once per second. Do not issue the
+						// unrelated obelisk voiceover every 50 ms or omit other players.
+						for (const auto& [_, client] : mServer->GetClients()) {
+							if (client) {
+								mServer->SendObjectiveUpdate(client, 0, 0);
+							}
+						}
+					}
 				}
 			}
 
