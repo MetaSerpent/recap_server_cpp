@@ -500,10 +500,7 @@ namespace Game {
 				game_leaderboard_getLeaderboard(session, response);
 			} else {
 				std::cout << "Undefined /game/api method: " << method << std::endl;
-				for (const auto& [name, value] : request.uri) {
-					std::cout << name << " = " << value << std::endl;
-				}
-				std::cout << std::endl;
+				// Do not disclose credentials or bearer tokens from unknown requests.
 				empty_xml_response(response);
 			}
 		});
