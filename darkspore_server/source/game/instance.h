@@ -83,6 +83,7 @@ namespace Game {
 	class CashOutData {
 		public:
 			void WriteTo(RakNet::BitStream& stream) const;
+			float GetDna() const { return mDna; }
 
 		private:
 			std::array<uint32_t, 4> mGoldMedals {};

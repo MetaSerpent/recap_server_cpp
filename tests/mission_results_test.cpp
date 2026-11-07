@@ -1,8 +1,10 @@
 #include "../darkspore_server/source/game/mission_results.h"
 #include <cassert>
 #include <cstdint>
+#include <limits>
 
 using Game::MissionResults::AddPackedMedal;
+using Game::MissionResults::AddDna;
 
 static_assert(AddPackedMedal(0u, 0, 4) == 0x00000004u);
 static_assert(AddPackedMedal(0x00000004u, 1, 3) == 0x00000304u);
@@ -10,6 +12,12 @@ static_assert(AddPackedMedal(0x00000304u, 2, 2) == 0x00020304u);
 static_assert(AddPackedMedal(0x00020304u, 3, 1) == 0x01020304u);
 static_assert(AddPackedMedal(0x01020304u, 4, 0xFF) == 0x01020304u);
 static_assert(AddPackedMedal(0x01020304u, 255, 0xFF) == 0x01020304u);
+static_assert(AddDna(0u, 50u) == 50u);
+static_assert(AddDna(300u, 50u) == 350u);
+static_assert(AddDna(std::numeric_limits<uint32_t>::max() - 5u, 50u) ==
+              std::numeric_limits<uint32_t>::max());
+static_assert(AddDna(std::numeric_limits<uint32_t>::max(), 50u) ==
+              std::numeric_limits<uint32_t>::max());
 
 int main() {
     uint32_t packed = 0;

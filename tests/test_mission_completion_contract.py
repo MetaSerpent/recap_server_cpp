@@ -22,6 +22,16 @@ class MissionCompletionContract(unittest.TestCase):
         self.assertIn("SendReconnectPlayer(client, GameState::ChainCashOut);", block)
         self.assertIn("SendChainCashOutMessages(client, 1);", block)
 
+    def test_cashout_saves_before_acknowledging_and_rolls_back(self):
+        block = SERVER.split("void Server::OnChainPlayerMsgs(", 1)[1].split(
+            "void Server::OnCrystalDragMessage(", 1
+        )[0]
+        self.assertIn("mGame.GetChainData().IsCompleted()", block)
+        self.assertIn("Game::MissionResults::AddDna(", block)
+        self.assertIn("account.dna = previousDna;", block)
+        self.assertLess(block.index("if (!user->Save())"),
+                        block.index("SendChainVoteMessages(client, value);", block.index("} else if (value == 2")))
+
     def test_repeated_or_out_of_dungeon_status_cannot_beam_out(self):
         block = SERVER.split("void Server::OnPlayerStatusUpdate(", 1)[1].split(
             "void Server::OnActionCommandMsgs(", 1

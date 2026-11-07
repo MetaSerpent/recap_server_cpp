@@ -10,6 +10,7 @@
 
 #include "game/instance.h"
 #include "game/mission_results.h"
+#include <cmath>
 #include "game/lua.h"
 #include "game/objectmanager.h"
 #include "game/serverevent.h"
@@ -908,9 +909,27 @@ namespace RakNet {
 				if (value == 0) {
 					SendChainVoteMessages(client, value);
 					SendChainVoteMessages(client, 1);
-				} else if (value == 2 && client->GetGameState() == GameState::ChainVoting) {
-					// Acknowledging the vote alone never entered cash-out and
-					// left the client waiting for a payload that could not arrive.
+				} else if (value == 2 && client->GetGameState() == GameState::ChainVoting &&
+					mGame.GetChainData().IsCompleted()) {
+					// Cash-out is the reward commit boundary. Save before
+					// acknowledging, so disconnections and repeated votes cannot
+					// silently create or duplicate DNA.
+					const auto& user = client->GetUser();
+					if (!user) {
+						break;
+					}
+					const float reward = mGame.GetCashOutData().GetDna();
+					if (!std::isfinite(reward) || reward < 0.f || reward >= 4294967296.f) {
+						break;
+					}
+					auto& account = user->get_account();
+					const auto previousDna = account.dna;
+					account.dna = Game::MissionResults::AddDna(
+						account.dna, static_cast<uint32_t>(reward));
+					if (!user->Save()) {
+						account.dna = previousDna;
+						break;
+					}
 					SendChainVoteMessages(client, value);
 					SendReconnectPlayer(client, GameState::ChainCashOut);
 					SendChainCashOutMessages(client, 1);
