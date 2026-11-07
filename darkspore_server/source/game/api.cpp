@@ -1094,15 +1094,24 @@ namespace Game {
 		const auto& transactionsString = request.uri.parameter("transactions");
 		if (!transactionsString.empty()) {
 			for (const auto& transaction : utils::explode_string(transactionsString, ';')) {
-				// w = weapon, check for more later
-				char type = transaction[0];
-				int64_t data = utils::to_number<int64_t>(std::string_view(&transaction[1]));
+				if (transaction.size() < 2) {
+					continue;
+				}
+				const auto numberText = std::string_view(transaction).substr(1);
+				uint32_t number = 0;
+				const auto [end, error] = std::from_chars(
+					numberText.data(), numberText.data() + numberText.size(), number);
+				if (error != std::errc{} || end != numberText.data() + numberText.size()) {
+					continue;
+				}
 
 				SporeNet::Part part(0);
-				switch (type) {
+				switch (transaction.front()) {
 					case 'w': {
-						// weapon
-						part.SetRigblock(static_cast<uint16_t>(data));
+						if (number == 0 || number > UINT16_MAX) {
+							continue;
+						}
+						part.SetRigblock(static_cast<uint16_t>(number));
 						part.SetIsFlair(false);
 						part.SetLevel(5);
 						part.SetMarketStatus(1);
@@ -1110,33 +1119,22 @@ namespace Game {
 						part.SetStatus(0);
 						part.SetUsage(1);
 						part.SetCreationDate(utils::get_unix_time());
-
 						break;
 					}
-
 					case 'p': {
-						// parts
-						const auto& vendor = SporeNet::Get().GetVendor();
-						part = vendor.GetPartOfferList().GetPart(data);
+						const auto& offers = SporeNet::Get().GetVendor().GetPartOfferList();
+						// Offer IDs sent by Parts::WriteApi are one-based.
+						if (number == 0 || number > offers.size()) {
+							continue;
+						}
+						part = offers.GetPart(static_cast<size_t>(number - 1));
 						break;
 					}
-
-					case 'b': {
-						// buyback
-						break;
-					}
-
-					case 's': {
-						// sell
-						break;
-					}
-
-					case 'f': {
-						// flair
-						break;
-					}
+					default:
+						// Buyback, sales and flair still require their economic
+						// implementation. Do not fabricate blank equipment for them.
+						continue;
 				}
-
 				parts.data().push_back(std::move(part));
 			}
 		}

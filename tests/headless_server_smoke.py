@@ -97,6 +97,20 @@ def verify_registration_roundtrip(port: int, cwd: Path) -> None:
         raise RuntimeError("Registered account has no persisted account state")
     initial_bytes = saved.read_bytes()
 
+    # Creating two players during one smoke run also catches the former
+    # time-seeded account-ID collision during rapid registrations.
+    second = base + "&name=SecondPlayer&email=second@example.invalid" \
+        + "&pass=ephemeral-password&avatar=1"
+    status, body = query_server(port, second)
+    if status != 200 or json.loads(body).get("success") is not True:
+        raise RuntimeError(f"Second account registration failed: HTTP {status}")
+    saved_second = cwd / "storage/user/second@example.invalid.xml"
+    second_document = ET.parse(saved_second)
+    first_id = document.getroot().findtext("account/id")
+    second_id = second_document.getroot().findtext("account/id")
+    if not first_id or not second_id or first_id == "0" or first_id == second_id:
+        raise RuntimeError("New accounts have missing or duplicate persistent IDs")
+
     # Duplicate registration must be rejected without overwriting a save.
     status, _ = query_server(port, registration)
     if status == 200 or saved.read_bytes() != initial_bytes:
