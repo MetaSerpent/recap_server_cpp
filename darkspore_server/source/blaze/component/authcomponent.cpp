@@ -11,6 +11,9 @@
 #include "utils/functions.h"
 
 #include <iostream>
+#include <array>
+#include <openssl/rand.h>
+#include "sporenet/auth_token.h"
 
 /*
 	Union types (0-4 means the value when creating the union)
@@ -536,7 +539,13 @@ namespace Blaze {
 			return;
 		}
 
-		user->set_auth_token(std::to_string(user->get_id()));
+		std::array<unsigned char, 16> randomBytes{};
+		if (RAND_bytes(randomBytes.data(), static_cast<int>(randomBytes.size())) != 1) {
+			// Never fall back to a predictable account-derived token.
+			request.reply(ErrorCode::AUTH_ERR_INVALID_USER);
+			return;
+		}
+		user->set_auth_token(SporeNet::Auth::EncodeToken(randomBytes));
 
 		TDF::Packet packet;
 		WriteAuthToken(packet, user->get_auth_token());

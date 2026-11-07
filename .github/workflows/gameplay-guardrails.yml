@@ -34,6 +34,10 @@ jobs:
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/mission_progression_test.cpp -o /tmp/mission_progression_test
           /tmp/mission_progression_test
+      - name: Compile and test token encoding
+        run: |
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/auth_token_test.cpp -o /tmp/auth_token_test
+          /tmp/auth_token_test
       - name: Compile and test account file identifiers
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/account_filename_test.cpp -o /tmp/account_filename_test

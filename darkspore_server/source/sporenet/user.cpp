@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <openssl/rand.h>
 
 /*
 <feed>
@@ -659,8 +660,23 @@ namespace SporeNet {
 		else {
 			user = std::make_shared<User>(name, username, password);
 
-			srand(time(NULL));
-			user->get_account().id = rand();
+			// The old srand(time(NULL))/rand() assigned identical IDs to
+			// accounts created within the same second.
+			uint32_t id = 0;
+			for (uint32_t attempt = 0; attempt < 16; ++attempt) {
+				if (RAND_bytes(reinterpret_cast<unsigned char*>(&id), sizeof(id)) != 1) {
+					throw std::runtime_error("Could not generate an account identifier");
+				}
+				id &= 0x7FFF'FFFFu;
+				if (id != 0 && !GetUserById(id)) {
+					break;
+				}
+				id = 0;
+			}
+			if (id == 0 || GetUserById(id)) {
+				throw std::runtime_error("Could not assign a unique account identifier");
+			}
+			user->get_account().id = id;
 
 			std::string filepath = Game::Config::Get(Game::CONFIG_STORAGE_PATH) + "user/" + username + ".xml";
 			if (std::filesystem::exists(filepath)) {

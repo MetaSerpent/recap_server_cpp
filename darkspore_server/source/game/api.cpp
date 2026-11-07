@@ -810,7 +810,9 @@ namespace Game {
 				}
 			}
 
-			user->Save();
+			if (!user->Save()) {
+				throw std::runtime_error("Failed to persist registered player data");
+			}
 
 			rapidjson::Document document = utils::json::NewDocumentObject();
 			utils::json::Set(document, "success", true);
