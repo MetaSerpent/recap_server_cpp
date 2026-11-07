@@ -1,10 +1,17 @@
 #include "../darkspore_server/source/game/mission_results.h"
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <limits>
 
 using Game::MissionResults::AddPackedMedal;
 using Game::MissionResults::AddDna;
+using Game::MissionResults::CountMedals;
+constexpr std::array<std::uint8_t, 8> objectiveMedals{0, 1, 2, 3, 4, 4, 255, 2};
+constexpr auto medalTotals = CountMedals(objectiveMedals, [](auto medal) { return medal; });
+static_assert(medalTotals.gold == 2);
+static_assert(medalTotals.silver == 1);
+static_assert(medalTotals.bronze == 2);
 
 static_assert(AddPackedMedal(0u, 0, 4) == 0x00000004u);
 static_assert(AddPackedMedal(0x00000004u, 1, 3) == 0x00000304u);

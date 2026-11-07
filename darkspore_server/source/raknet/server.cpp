@@ -2126,11 +2126,14 @@ namespace RakNet {
 	}
 
 	void Server::SendObjectivesInitForLevel(const ClientPtr& client) {
+		if (!client) {
+			return;
+		}
 		// 100%
 		BitStream outStream(8);
 		outStream.Write(PacketID::ObjectivesInitForLevel);
 
-		const auto& objectives = mGame.GetObjectives();
+		const auto objectives = mGame.GetObjectivesForPlayer(client->GetId(), false);
 		uint8_t count = static_cast<uint8_t>(objectives.size());
 
 		Write<uint8_t>(outStream, count);
@@ -2142,7 +2145,7 @@ namespace RakNet {
 	}
 
 	void Server::SendObjectiveUpdate(const ClientPtr& client, uint8_t id, uint32_t voiceover) {
-		const auto& objectives = mGame.GetObjectives();
+		const auto objectives = mGame.GetObjectivesForPlayer(client->GetId(), false);
 		if (!client || id >= objectives.size()) {
 			return;
 		}
@@ -2170,7 +2173,7 @@ namespace RakNet {
 		BitStream outStream(8);
 		outStream.Write(PacketID::ObjectivesComplete);
 
-		const auto& objectives = mGame.GetObjectives();
+		const auto objectives = mGame.GetObjectivesForPlayer(client->GetId(), true);
 
 		uint8_t count = static_cast<uint8_t>(objectives.size());
 		uint32_t medals = 0;

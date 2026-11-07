@@ -30,9 +30,8 @@ class DamageObjectiveContracts(unittest.TestCase):
         snippet = INSTANCE.split("void Instance::BeamOut(", 1)[1].split(
             "bool Instance::SendObjectCreate(", 1
         )[0]
-        self.assertIn('mDamageObjectives.ScoreDamageOften(player->GetId(), major)', snippet)
-        self.assertIn("mDamageObjectives.ScoreHugeDamage(player->GetId())", snippet)
-        self.assertLess(snippet.index("mDamageObjectives.ScoreHugeDamage("),
+        self.assertIn("GetObjectivesForPlayer(player->GetId(), true)", snippet)
+        self.assertLess(snippet.index("GetObjectivesForPlayer("),
                         snippet.index("SendObjectivesComplete(client);"))
         self.assertNotIn("mCashOutData.mGoldMedals.fill(3);", snippet)
 

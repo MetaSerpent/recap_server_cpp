@@ -274,6 +274,52 @@ namespace Game {
 		//
 	}
 
+	std::vector<RakNet::Objective> Instance::GetObjectivesForPlayer(uint8_t playerId, bool completed) const {
+		// A mission has global objectives and player-specific objectives.
+		// Construct a snapshot for each client; never mutate the shared
+		// objective array when serializing another player's result.
+		auto objectives = mObjectives;
+		const uint32_t major = mChainData.GetLevelIndex() == 0 ? 0U :
+			std::min<uint32_t>(mChainData.GetMajorDifficulty(), 7U);
+		for (auto& objective : objectives) {
+			if (objective.id == utils::hash_id("FinishLevelQuickly")) {
+				if (completed) {
+					const auto seconds = GetTimeElapsed() / 1000;
+					objective.value = static_cast<uint32_t>(
+						std::min<uint64_t>(seconds, UINT32_MAX));
+					objective.medal = static_cast<RakNet::ObjectiveMedal>(
+						ObjectiveScoring::ScoreFinishLevelQuickly(seconds));
+				}
+			} else if (objective.id == utils::hash_id("DefeatAllMonsters")) {
+				objective.value = mEnemyClearTracker.GetKillPercent();
+				if (completed) {
+					objective.medal = static_cast<RakNet::ObjectiveMedal>(
+						mEnemyClearTracker.GetMedal());
+				}
+			} else if (objective.id == utils::hash_id("TouchAllObelisks")) {
+				objective.value = static_cast<uint32_t>(
+					std::min<std::size_t>(mTouchedObelisks.size(), UINT32_MAX));
+				if (completed) {
+					objective.medal = static_cast<RakNet::ObjectiveMedal>(
+						ObjectiveScoring::ScoreTouchedObelisks(mTouchedObelisks.size()));
+				}
+			} else if (objective.id == utils::hash_id("DoDamageOften")) {
+				objective.value = mDamageObjectives.GetHitCount(playerId);
+				if (completed) {
+					objective.medal = static_cast<RakNet::ObjectiveMedal>(
+						mDamageObjectives.ScoreDamageOften(playerId, major));
+				}
+			} else if (objective.id == utils::hash_id("HugeDamage")) {
+				objective.value = mDamageObjectives.GetHugeHitCount(playerId);
+				if (completed) {
+					objective.medal = static_cast<RakNet::ObjectiveMedal>(
+						mDamageObjectives.ScoreHugeDamage(playerId));
+				}
+			}
+		}
+		return objectives;
+	}
+
 	void Instance::OnDamageDealt(const ObjectPtr& attacker, const ObjectPtr& victim, float appliedDamage) {
 		if (!attacker || !victim || !mGameStarted || !mServer ||
 			!attacker->IsPlayerControlled() || attacker->GetTeam() == victim->GetTeam()) {
@@ -299,15 +345,13 @@ namespace Game {
 			return;
 		}
 		for (std::size_t i = 0; i < mObjectives.size(); ++i) {
-			auto& objective = mObjectives[i];
-			if (objective.id == utils::hash_id("DoDamageOften")) {
-				objective.value = mDamageObjectives.GetHitCount(playerId);
-			} else if (objective.id == utils::hash_id("HugeDamage")) {
-				objective.value = mDamageObjectives.GetHugeHitCount(playerId);
-			} else {
-				continue;
+			const auto& objective = mObjectives[i];
+			if (objective.id == utils::hash_id("DoDamageOften") ||
+				objective.id == utils::hash_id("HugeDamage")) {
+				// The serializer reads this player's counters, not the
+				// last player's shared objective value.
+				mServer->SendObjectiveUpdate(client, static_cast<uint8_t>(i), 0);
 			}
-			mServer->SendObjectiveUpdate(client, static_cast<uint8_t>(i), 0);
 		}
 	}
 
@@ -480,15 +524,6 @@ namespace Game {
 		// Set objectives
 		const auto& client = mServer->GetClient(player->GetId());
 		if (client) {
-			// The two damage objectives are player-specific in the original
-			// Lua scripts; present only this player's current counters.
-			for (auto& objective : mObjectives) {
-				if (objective.id == utils::hash_id("DoDamageOften")) {
-					objective.value = mDamageObjectives.GetHitCount(player->GetId());
-				} else if (objective.id == utils::hash_id("HugeDamage")) {
-					objective.value = mDamageObjectives.GetHugeHitCount(player->GetId());
-				}
-			}
 			mServer->SendObjectivesInitForLevel(client);
 			for (uint8_t i = 0, l = static_cast<uint8_t>(mObjectives.size()); i < l; ++i) {
 				mServer->SendObjectiveUpdate(client, i, 0);
@@ -1033,42 +1068,9 @@ namespace Game {
 		}
 		const auto& client = mServer->GetClient(player->GetId());
 		if (client) {
-			// Exact scoring thresholds recovered from the bundled
-			// Objective_FinishLevelQuickly.lua: 600/900/1200 seconds.
-			if (!mObjectives.empty() &&
-				mObjectives.front().id == utils::hash_id("FinishLevelQuickly")) {
-				auto& speed = mObjectives.front();
-				const auto elapsedSeconds = GetTimeElapsed() / 1000;
-				speed.value = static_cast<uint32_t>(
-					std::min<uint64_t>(elapsedSeconds, UINT32_MAX));
-				speed.medal = static_cast<RakNet::ObjectiveMedal>(
-					ObjectiveScoring::ScoreFinishLevelQuickly(elapsedSeconds));
-			}
-			// Original objective_DefeatAllMonsters.lua awards medals at
-			// 95/75/50 percent of spawned enemies killed. Unseen or
-			// repeatedly killed objects cannot inflate this result.
-			for (auto& objective : mObjectives) {
-				if (objective.id == utils::hash_id("DefeatAllMonsters")) {
-					objective.value = mEnemyClearTracker.GetKillPercent();
-					objective.medal = static_cast<RakNet::ObjectiveMedal>(
-						mEnemyClearTracker.GetMedal());
-				} else if (objective.id == utils::hash_id("TouchAllObelisks")) {
-					objective.value = static_cast<uint32_t>(
-						std::min<std::size_t>(mTouchedObelisks.size(), UINT32_MAX));
-					objective.medal = static_cast<RakNet::ObjectiveMedal>(
-						ObjectiveScoring::ScoreTouchedObelisks(mTouchedObelisks.size()));
-				} else if (objective.id == utils::hash_id("DoDamageOften")) {
-					objective.value = mDamageObjectives.GetHitCount(player->GetId());
-					const auto major = mChainData.GetLevelIndex() == 0 ? 0U :
-						std::min<uint32_t>(mChainData.GetMajorDifficulty(), 7U);
-					objective.medal = static_cast<RakNet::ObjectiveMedal>(
-						mDamageObjectives.ScoreDamageOften(player->GetId(), major));
-				} else if (objective.id == utils::hash_id("HugeDamage")) {
-					objective.value = mDamageObjectives.GetHugeHitCount(player->GetId());
-					objective.medal = static_cast<RakNet::ObjectiveMedal>(
-						mDamageObjectives.ScoreHugeDamage(player->GetId()));
-				}
-			}
+			// Build final scores for this particular player. Global progress
+			// stays separate from per-player hit counters.
+			const auto objectives = GetObjectivesForPlayer(player->GetId(), true);
 			// Inform the client about final objectives before it leaves the
 			// dungeon. Cash-out data is handled by the subsequent vote.
 			mServer->SendObjectivesComplete(client);
@@ -1078,26 +1080,21 @@ namespace Game {
 				mChainData.SetProgression(Progression::CompletePlanet(mChainData.GetProgression()));
 				mChainData.SetCompleted(true);
 			}
-			// Reward algorithms are still unverified; keep their existing
-			// placeholders, but report the number of planets actually completed.
-			mCashOutData.mDna = 50;
+			// No verified formula for extra DNA at mission cash-out.
+			// Regular loot is already persisted on pickup. Do not generate
+			// invented DNA whenever a client reports successful beam-out.
+			mCashOutData.mDna = 0.f;
 			mCashOutData.mPlanetsCompleted = mChainData.GetProgression();
 			// Associate each of the four wire slots with a player index.
 			// This slot mapping still needs validation against client captures;
 			// the medal counts themselves come from real objective results.
 			if (player->GetId() < mCashOutData.mGoldMedals.size()) {
 				const auto index = player->GetId();
-				mCashOutData.mGoldMedals[index] = 0;
-				mCashOutData.mSilverMedals[index] = 0;
-				mCashOutData.mBronzeMedals[index] = 0;
-				for (const auto& objective : mObjectives) {
-					switch (objective.medal) {
-						case RakNet::ObjectiveMedal::Gold: ++mCashOutData.mGoldMedals[index]; break;
-						case RakNet::ObjectiveMedal::Silver: ++mCashOutData.mSilverMedals[index]; break;
-						case RakNet::ObjectiveMedal::Bronze: ++mCashOutData.mBronzeMedals[index]; break;
-						default: break;
-					}
-				}
+				const auto totals = MissionResults::CountMedals(
+					objectives, [](const auto& obj) { return static_cast<uint8_t>(obj.medal); });
+				mCashOutData.mGoldMedals[index] = totals.gold;
+				mCashOutData.mSilverMedals[index] = totals.silver;
+				mCashOutData.mBronzeMedals[index] = totals.bronze;
 			}
 			// Rare/unique drop probabilities have not been reconstructed:
 			// leave them zero rather than reporting fictitious percentages.

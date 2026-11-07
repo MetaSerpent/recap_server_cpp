@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <utility>
 
 namespace Game::MissionResults {
     // The wire format reserves one uint32_t for four 8-bit medal values,
@@ -13,6 +14,29 @@ namespace Game::MissionResults {
                                            std::uint8_t medal) noexcept {
         return index < sizeof(packed) ?
             packed | (std::uint32_t{medal} << (8U * index)) : packed;
+    }
+
+    struct MedalCounts {
+        std::uint32_t gold = 0;
+        std::uint32_t silver = 0;
+        std::uint32_t bronze = 0;
+    };
+
+    // Derive medal totals from a single player's final objective snapshot.
+    // A count is not awarded for Failed, InProgress or unknown statuses.
+    template<typename Objectives, typename MedalOf>
+    constexpr MedalCounts CountMedals(const Objectives& objectives,
+                                      MedalOf medalOf) {
+        MedalCounts result{};
+        for (const auto& objective : objectives) {
+            switch (static_cast<std::uint8_t>(medalOf(objective))) {
+                case 4: ++result.gold; break;
+                case 3: ++result.silver; break;
+                case 2: ++result.bronze; break;
+                default: break;
+            }
+        }
+        return result;
     }
 
     // Adding rewards cannot wrap the persistent account's uint32_t DNA.

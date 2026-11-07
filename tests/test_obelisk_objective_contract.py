@@ -31,8 +31,8 @@ class ObeliskObjectiveContract(unittest.TestCase):
         method = CPP.split("void Instance::BeamOut(", 1)[1].split(
             "bool Instance::SendObjectCreate(", 1
         )[0]
-        self.assertIn("ObjectiveScoring::ScoreTouchedObelisks", method)
-        self.assertLess(method.index("ObjectiveScoring::ScoreTouchedObelisks"),
+        self.assertIn("GetObjectivesForPlayer(player->GetId(), true)", method)
+        self.assertLess(method.index("GetObjectivesForPlayer("),
                         method.index("SendObjectivesComplete(client);"))
 
     def test_restart_clears_touch_history(self):

@@ -34,8 +34,8 @@ class EnemyClearContract(unittest.TestCase):
         beam = SOURCE.split("void Instance::BeamOut(", 1)[1].split(
             "bool Instance::SendObjectCreate(", 1
         )[0]
-        self.assertIn("mEnemyClearTracker.GetMedal()", beam)
-        self.assertLess(beam.index("mEnemyClearTracker.GetMedal()"),
+        self.assertIn("GetObjectivesForPlayer(player->GetId(), true)", beam)
+        self.assertLess(beam.index("GetObjectivesForPlayer("),
                         beam.index("SendObjectivesComplete(client)"))
 
     def test_restart_clears_previous_planet_kills(self):

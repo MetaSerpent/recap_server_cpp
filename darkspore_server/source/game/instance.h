@@ -155,6 +155,7 @@ namespace Game {
 			const auto& GetInfo() const { return mData; }
 
 			const auto& GetObjectives() const { return mObjectives; }
+			std::vector<RakNet::Objective> GetObjectivesForPlayer(uint8_t playerId, bool completed) const;
 
 			void AddServerTask(std::function<void(void)> task);
 			void AddClientTask(uint8_t id, RakNet::PacketID packet);
