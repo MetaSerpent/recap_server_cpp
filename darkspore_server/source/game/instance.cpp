@@ -83,6 +83,11 @@ namespace Game {
 
 	bool Instance::Start() {
 		Stop();
+		// A restarted instance must rebuild its level and object graph.
+		mGameStarted = false;
+		mLevelLoaded = false;
+		mMarkers.clear();
+		mPlayerSpawnpoints.clear();
 
 		mObjectManager = std::make_unique<ObjectManager>(*this);
 		mLua = std::make_unique<Lua>(*this);
@@ -305,12 +310,23 @@ namespace Game {
 	}
 
 	void Instance::OnPlayerStart(const PlayerPtr& player) {
+		if (!player || !mLua || !mServer || !mObjectManager) {
+			return;
+		}
 		std::cout << "Player Start" << std::endl;
 
-		mLua->PreloadAbilities();
-		mGameStarted = LoadLevel();
+		const bool initializeWorld = !mGameStarted;
+		if (initializeWorld) {
+			mLua->PreloadAbilities();
+			mGameStarted = LoadLevel();
+		}
+		if (!mGameStarted) {
+			return;
+		}
 
-		if (mGameStarted) {
+		// Shared enemies, obelisks and markers must be spawned once per
+		// instance, not again for every player entering the dungeon.
+		if (initializeWorld) {
 			std::string levelName = mChainData.GetName().data();
 
 			// create level objects and whatnot
@@ -394,13 +410,33 @@ namespace Game {
 				mServer->SendObjectiveUpdate(client, i, 0);
 			}
 
-			// Create all existing objects
+			// Snapshot existing objects for the entering client. The world
+			// object flag is global, so it cannot indicate which clients have
+			// received a create packet.
 			for (const auto& object : mObjectManager->GetActiveObjects()) {
-				// Create object in client
-				SendObjectCreate(object);
-
-				// Apply effects
-
+				if (!object) {
+					continue;
+				}
+				if (initializeWorld) {
+					SendObjectCreate(object);
+				} else {
+					mServer->SendObjectCreate(client, object);
+					if (const auto& data = object->GetCombatantData()) {
+						mServer->SendCombatantDataUpdate(client, object, *data);
+					}
+					if (const auto& data = object->GetAttributeData()) {
+						mServer->SendAttributeDataUpdate(client, object, *data);
+					}
+					if (const auto& data = object->GetLootData()) {
+						mServer->SendLootDataUpdate(client, object, *data);
+					}
+					if (const auto& data = object->GetInteractableData()) {
+						mServer->SendInteractableDataUpdate(client, object, *data);
+					}
+					if (const auto& data = object->GetAgentBlackboardData()) {
+						mServer->SendAgentBlackboardUpdate(client, object, *data);
+					}
+				}
 			}
 		}
 

@@ -365,6 +365,8 @@ namespace Game {
 				return false;
 			}
 
+			// Avoid carrying markersets over from an earlier dungeon.
+			mMarkersets.clear();
 			for (const auto& child : node.child("markersets")) {
 				if (!utils::string_iequals(child.name(), "entry")) {
 					continue;
