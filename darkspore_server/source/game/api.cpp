@@ -31,6 +31,7 @@
 #include <filesystem>
 #include <chrono>
 #include <charconv>
+#include <vector>
 
 /*
 	A bunch of stuff used in the client
@@ -1152,25 +1153,47 @@ namespace Game {
 	void API::game_inventory_updatePartStatus(HTTP::Session& session, HTTP::Response& response) {
 		const auto& user = session.get_user();
 		if (!user) {
-			// Error
+			empty_xml_response(response);
 			return;
 		}
-
 		const auto& request = session.get_request();
+		const auto partIds = utils::explode_string(request.uri.parameter("part_id"), ',');
+		const auto statuses = utils::explode_string(request.uri.parameter("status"), ',');
+		auto& parts = user->get_parts();
 
-		auto partIds = utils::explode_string(request.uri.parameter("part_id"), ',');
-		auto statuses = utils::explode_string(request.uri.parameter("status"), ',');
-
-		size_t len = std::min<size_t>(partIds.size(), statuses.size());
-		if (len > 0) {
-			auto& parts = user->get_parts();
-			for (size_t i = 0; i < len; ++i) {
-				auto partIndex = utils::to_number<uint32_t>(partIds[i]);
-				auto status = utils::to_number<uint8_t>(statuses[i]);
-				parts.data()[partIndex].SetStatus(status);
+		// The inventory API emits 1-based part IDs (see Parts::WriteApi).
+		// Parse the complete request before changing any account state.
+		std::vector<std::pair<size_t, uint8_t>> updates;
+		if (partIds.size() == statuses.size() && partIds.size() <= 1024) {
+			bool valid = true;
+			for (size_t i = 0; i < partIds.size(); ++i) {
+				uint32_t partId = 0;
+				uint32_t status = 0;
+				const auto& idText = partIds[i];
+				const auto& statusText = statuses[i];
+				const auto [idEnd, idError] = std::from_chars(
+					idText.data(), idText.data() + idText.size(), partId);
+				const auto [statusEnd, statusError] = std::from_chars(
+					statusText.data(), statusText.data() + statusText.size(), status);
+				if (idError != std::errc{} || idEnd != idText.data() + idText.size() ||
+					statusError != std::errc{} || statusEnd != statusText.data() + statusText.size() ||
+					partId == 0 || partId > parts.size() || status > 255) {
+					valid = false;
+					break;
+				}
+				updates.emplace_back(static_cast<size_t>(partId - 1), static_cast<uint8_t>(status));
+			}
+			if (valid && !updates.empty()) {
+				const auto originalParts = parts.data();
+				for (const auto& [index, status] : updates) {
+					parts.data()[index].SetStatus(status);
+				}
+				if (!user->Save()) {
+					// A failed write must not leave a modified in-memory inventory.
+					parts.data() = originalParts;
+				}
 			}
 		}
-
 		empty_xml_response(response);
 	}
 

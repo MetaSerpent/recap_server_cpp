@@ -531,41 +531,40 @@ namespace Game {
 	}
 
 	void Instance::InteractWithObject(const PlayerPtr& player, uint32_t objectId) {
-		if (!player) {
+		if (!player || !mObjectManager) {
 			return;
 		}
-
 		const auto& object = mObjectManager->Get(objectId);
 		if (!object || object->IsMarkedForDeletion()) {
 			return;
 		}
-
-		// Check for interactable ability
-
-		const auto& interactableData = object->GetInteractableData();
-		if (interactableData) {
-			interactableData->SetTimesUsed(interactableData->GetTimesUsed() + 1);
+		const auto& noun = object->GetNoun();
+		if (!noun) {
+			return;
 		}
 
-		const auto& noun = object->GetNoun();
-		if (noun) {
-			switch (noun->GetType()) {
-				case NounType::Loot:
-					PickupLoot(player, object);
-					break;
-
-				case NounType::Crystal:
-					PickupCatalyst(player, object);
-					break;
-
-				default:
-					const auto& characterObject = player->GetDeployedCharacterObject();
-					DropLoot(characterObject, characterObject, utils::enum_helper<DropType>::bor(DropType::Catalysts, DropType::Orbs));
-					break;
-			}
-		} else {
-			const auto& characterObject = player->GetDeployedCharacterObject();
-			DropLoot(characterObject, characterObject, utils::enum_helper<DropType>::bor(DropType::Catalysts, DropType::Orbs));
+		const auto& interactableData = object->GetInteractableData();
+		// Loot pickups are single-use. Never consume a use on a failed pickup
+		// (full catalyst grid, missing loot data, or failed inventory save).
+		if (interactableData &&
+			(interactableData->GetUsesAllowed() <= 0 ||
+			 interactableData->GetTimesUsed() >= interactableData->GetUsesAllowed())) {
+			return;
+		}
+		switch (noun->GetType()) {
+			case NounType::Loot:
+				PickupLoot(player, object);
+				break;
+			case NounType::Crystal:
+				PickupCatalyst(player, object);
+				break;
+			default:
+				// Other objects need their own scripted interaction handlers.
+				// The old fallback generated unlimited catalysts and health orbs.
+				return;
+		}
+		if (object->IsMarkedForDeletion() && interactableData) {
+			interactableData->SetTimesUsed(interactableData->GetTimesUsed() + 1);
 		}
 	}
 
