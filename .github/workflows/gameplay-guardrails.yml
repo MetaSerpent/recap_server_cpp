@@ -26,5 +26,9 @@ jobs:
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/cooldown_math_test.cpp -o /tmp/cooldown_math_test
           /tmp/cooldown_math_test
+      - name: Compile and test account file identifiers
+        run: |
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/account_filename_test.cpp -o /tmp/account_filename_test
+          /tmp/account_filename_test
       - name: Check squad-skill dispatch contract
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v

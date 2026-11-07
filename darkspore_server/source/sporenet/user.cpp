@@ -1,6 +1,7 @@
 
 // Include
 #include "user.h"
+#include "account_filename.h"
 #include "instance.h"
 
 #include "game/config.h"
@@ -447,6 +448,9 @@ namespace SporeNet {
 	}
 
 	bool User::Load() {
+		if (!AccountFiles::IsSafeAccountIdentifier(mUsername)) {
+			return false;
+		}
 		std::string filepath = Game::Config::Get(Game::CONFIG_STORAGE_PATH) + "user/" + mUsername + ".xml";
 
 		pugi::xml_document document;
@@ -492,6 +496,9 @@ namespace SporeNet {
 	}
 
 	bool User::Save() {
+		if (!AccountFiles::IsSafeAccountIdentifier(mUsername)) {
+			return false;
+		}
 		std::string filepath = Game::Config::Get(Game::CONFIG_STORAGE_PATH) + "user/" + mUsername + ".xml";
 
 		pugi::xml_document document;
@@ -514,7 +521,26 @@ namespace SporeNet {
 			mParts.Write(docUser);
 		}
 
-		return document.save_file(filepath.c_str(), "\t", 1U, pugi::encoding_latin1);
+		// Write a complete snapshot to a sibling file before replacing the
+		// previous save. Crashes during XML serialization must not truncate it.
+		std::error_code error;
+		std::filesystem::create_directories(std::filesystem::path(filepath).parent_path(), error);
+		if (error) {
+			return false;
+		}
+		const std::string tempPath = filepath + ".tmp";
+		if (!document.save_file(tempPath.c_str(), "\t", 1U, pugi::encoding_latin1)) {
+			std::filesystem::remove(tempPath, error);
+			return false;
+		}
+		error.clear();
+		std::filesystem::rename(tempPath, filepath, error);
+		if (error) {
+			std::error_code cleanupError;
+			std::filesystem::remove(tempPath, cleanupError);
+			return false;
+		}
+		return true;
 	}
 
 	bool User::IsFriend(const User& user) const {
@@ -621,6 +647,9 @@ namespace SporeNet {
 
 	// UserManager
 	UserPtr UserManager::SignUp(const std::string& name, const std::string& username, const std::string& password) {
+		if (!AccountFiles::IsSafeAccountIdentifier(username)) {
+			throw std::runtime_error("Invalid account identifier");
+		}
 		UserPtr user;
 
 		auto it = sUsersByEmail.find(username);
@@ -646,6 +675,9 @@ namespace SporeNet {
 		return user;
 	}
 	std::tuple<UserPtr, bool, bool> UserManager::Login(const std::string& username, const std::string& password) {
+		if (!AccountFiles::IsSafeAccountIdentifier(username)) {
+			return { nullptr, false, false };
+		}
 		UserPtr user;
 
 		bool success = false;

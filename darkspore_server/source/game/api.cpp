@@ -30,6 +30,7 @@
 #include <iomanip>
 #include <filesystem>
 #include <chrono>
+#include <charconv>
 
 /*
 	A bunch of stuff used in the client
@@ -743,6 +744,13 @@ namespace Game {
 		auto avatar = request.uri.parameter("avatar");
 
 		try {
+			// Reject invalid numeric input before creating a user file.
+			uint32_t avatarId = 0;
+			const auto [end, parseError] = std::from_chars(
+				avatar.data(), avatar.data() + avatar.size(), avatarId);
+			if (avatar.empty() || parseError != std::errc{} || end != avatar.data() + avatar.size()) {
+				throw std::runtime_error("Invalid avatar identifier");
+			}
 			const auto& user = SporeNet::Get().GetUserManager().SignUp(name, mail, pass);
 		
 			const auto& templateCreaturePartsPath = Game::Config::Get(Game::ConfigKey::CONFIG_TEMPLATE_CREATURE_PARTS_PATH);
@@ -757,8 +765,10 @@ namespace Game {
 			// TODO: Unlocking all creatures from start to test; remove that in the future
 			const auto templates = SporeNet::Get().GetTemplateDatabase().List();
 			user->get_account().creatureRewards = templates.size();
-			for (auto& templateCreature : templates) {
-				user->UnlockCreature(templateCreature->GetNoun());
+			for (const auto& templateCreature : templates) {
+				if (templateCreature) {
+					user->UnlockCreature(templateCreature->GetNoun());
+				}
 			}
 
 			// TODO: Unlocking everything from start to test; remove that in the future
@@ -771,7 +781,7 @@ namespace Game {
 			account.defaultDeckPveId = 1;
 			account.defaultDeckPvpId = 1;
 			account.level = 100;
-			account.avatarId = stoi(avatar);
+			account.avatarId = avatarId;
 			account.dna = 10000000;
 			account.newPlayerInventory = 1;
 			account.newPlayerProgress = 9500;
@@ -793,10 +803,10 @@ namespace Game {
 
 			user->ResetSquads();
 			auto squads = user->get_squads();
-			for (uint16_t squadSlot = 1; squadSlot <= 3; squadSlot++) {
-				uint16_t templateId = squadSlot - 1;
-				auto squad1 = squads[squadSlot - 1];
-				squad1->SetCreatureId(0, templates[templateId]->GetNoun());
+			for (size_t slot = 0; slot < 3 && slot < templates.size() && slot < squads.size(); ++slot) {
+				if (templates[slot] && squads[slot]) {
+					squads[slot]->SetCreatureId(0, templates[slot]->GetNoun());
+				}
 			}
 
 			user->Save();
