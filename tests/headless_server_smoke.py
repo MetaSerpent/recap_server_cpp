@@ -7,7 +7,8 @@ Runs exclusively on ephemeral loopback ports in a temporary directory.
 from __future__ import annotations
 
 import argparse
-from contextlib import ExitStack
+import http.client
+import json
 from pathlib import Path
 import socket
 import subprocess
@@ -34,6 +35,41 @@ def reserve_ports():
     finally:
         for sock in sockets:
             sock.close()
+
+
+def query_server(port: int, resource: str) -> tuple[int, bytes]:
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    try:
+        connection.request("GET", resource)
+        response = connection.getresponse()
+        return response.status, response.read()
+    finally:
+        connection.close()
+
+
+def verify_http_routes(port: int) -> None:
+    # The launcher polls this API before opening the game.
+    status, data = query_server(port, "/recap/api?method=api.game.status")
+    if status != 200:
+        raise RuntimeError(f"Launcher status API returned HTTP {status}")
+    payload = json.loads(data)
+    if not isinstance(payload.get("enablePlayButton"), bool):
+        raise RuntimeError("Launcher API returned an invalid JSON status payload")
+
+    # Exercise a real XML response expected by the unmodified game client.
+    status, data = query_server(port, "/game/api?method=api.status.getStatus")
+    if status != 200 or b"<status>" not in data:
+        raise RuntimeError(f"Game status XML API returned invalid response: {status}")
+
+    # A nonexistent file must not be served as a successful route.
+    status, _ = query_server(port, "/__recap_missing_file_for_smoke__")
+    if status != 404:
+        raise RuntimeError(f"Missing static resource returned HTTP {status}, expected 404")
+
+    # The public HTTP listener must reject traversal attempts.
+    status, _ = query_server(port, "/../__recap_path_traversal_probe__")
+    if status != 400:
+        raise RuntimeError(f"Illegal HTTP path returned HTTP {status}, expected 400")
 
 
 def smoke(server: Path, data: Path) -> None:
@@ -69,11 +105,12 @@ def smoke(server: Path, data: Path) -> None:
                         time.sleep(0.1)
                 if not ready:
                     raise RuntimeError("Headless server did not bind an HTTP listener")
+                verify_http_routes(ports["SERVER_HTTP_PORT"])
                 proc.terminate()
                 code = proc.wait(timeout=20)
                 if code != 0:
                     raise RuntimeError(f"Headless server crashed on SIGTERM: exit={code}")
-                print("Headless server opened HTTP and shut down cleanly")
+                print("Headless server served launcher/game APIs, rejected bad requests and shut down cleanly")
             finally:
                 if proc.poll() is None:
                     proc.kill()

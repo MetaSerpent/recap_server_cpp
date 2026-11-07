@@ -426,10 +426,8 @@ namespace Game {
 				}
 			}
 
-			for (auto& [name, value] : request.uri) {
-				std::cout << name << " = " << value << std::endl;
-			}
-			std::cout << std::endl;
+			// Do not log raw request parameters: the game sends passwords and
+			// bearer tokens in the URI, including during login and saving.
 
 			auto version = request.uri.parameter("version");
 			auto build = request.uri.parameter("build");
