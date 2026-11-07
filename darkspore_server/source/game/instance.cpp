@@ -915,6 +915,9 @@ namespace Game {
 		}
 		const auto& client = mServer->GetClient(player->GetId());
 		if (client) {
+			// Inform the client about final objectives before it leaves the
+			// dungeon. Cash-out data is handled by the subsequent vote.
+			mServer->SendObjectivesComplete(client);
 			// A repeated beam-out status packet must not count the same planet
 			// multiple times. The run is limited to five planets.
 			if (!mChainData.IsCompleted()) {

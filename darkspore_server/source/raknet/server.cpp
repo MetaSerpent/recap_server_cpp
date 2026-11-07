@@ -9,6 +9,7 @@
 #include "utils/functions.h"
 
 #include "game/instance.h"
+#include "game/mission_results.h"
 #include "game/lua.h"
 #include "game/objectmanager.h"
 #include "game/serverevent.h"
@@ -671,7 +672,11 @@ namespace RakNet {
 			}
 
 			case 0x20: {
-				mGame.BeamOut(player);
+				// Only an in-dungeon player can complete a level. Repeated
+				// status packets after leaving the dungeon are ignored.
+				if (client->GetGameState() == GameState::Dungeon) {
+					mGame.BeamOut(player);
+				}
 				break;
 			}
 		}
@@ -886,9 +891,14 @@ namespace RakNet {
 	}
 
 	void Server::OnChainPlayerMsgs(const ClientPtr& client) {
-		auto bytesToRead = mInStream.GetNumberOfUnreadBits() / 8;
-
-		uint8_t value;
+		if (!client || !client->GetPlayer()) {
+			return;
+		}
+		const auto bytesToRead = mInStream.GetNumberOfUnreadBits() / 8;
+		if (bytesToRead == 0) {
+			return;
+		}
+		uint8_t value = 0;
 		Read<uint8_t>(mInStream, value);
 
 		std::cout << "OnChainPlayerMsgs(" << bytesToRead << "): " << (int)value << std::endl;
@@ -898,9 +908,12 @@ namespace RakNet {
 				if (value == 0) {
 					SendChainVoteMessages(client, value);
 					SendChainVoteMessages(client, 1);
-				} else if (value == 2) {
-					// Cashout
+				} else if (value == 2 && client->GetGameState() == GameState::ChainVoting) {
+					// Acknowledging the vote alone never entered cash-out and
+					// left the client waiting for a payload that could not arrive.
 					SendChainVoteMessages(client, value);
+					SendReconnectPlayer(client, GameState::ChainCashOut);
+					SendChainCashOutMessages(client, 1);
 				}
 				break;
 			}
@@ -2079,9 +2092,10 @@ namespace RakNet {
 	}
 
 	void Server::SendChainCashOutMessages(const ClientPtr& client, uint8_t value) {
-		// Packet size: 0x04
+		// The cash-out payload has its own wire ID (0xAB), separate from
+		// chain voting (0xA9).
 		BitStream outStream(8);
-		outStream.Write(PacketID::ChainVoteMsgs);
+		outStream.Write(PacketID::ChainCashOutMsgs);
 
 		Write<uint8_t>(outStream, value);
 		if (value != 0) {
@@ -2109,10 +2123,13 @@ namespace RakNet {
 	}
 
 	void Server::SendObjectiveUpdate(const ClientPtr& client, uint8_t id, uint32_t voiceover) {
+		const auto& objectives = mGame.GetObjectives();
+		if (!client || id >= objectives.size()) {
+			return;
+		}
 		BitStream outStream(8);
 		outStream.Write(PacketID::ObjectiveUpdated);
 
-		const auto& objectives = mGame.GetObjectives();
 		const auto& objective = objectives[id];
 
 		Write<uint32_t>(outStream, objective.id);
@@ -2128,6 +2145,9 @@ namespace RakNet {
 	}
 
 	void Server::SendObjectivesComplete(const ClientPtr& client) {
+		if (!client) {
+			return;
+		}
 		BitStream outStream(8);
 		outStream.Write(PacketID::ObjectivesComplete);
 
@@ -2141,7 +2161,10 @@ namespace RakNet {
 			const auto& objective = objectives[i];
 			objective.WriteTo(outStream);
 
-			medals |= (static_cast<uint32_t>(objective.medal) << (8 * i));
+			// Five objectives exist, but the protocol summary is 32-bit.
+			// Ignore surplus medals rather than shifting by 32+ bits (UB).
+			medals = Game::MissionResults::AddPackedMedal(
+				medals, i, static_cast<uint8_t>(objective.medal));
 		}
 
 		Write<uint32_t>(outStream, medals);
