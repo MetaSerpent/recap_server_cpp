@@ -19,6 +19,7 @@ Darkspore installation and launcher. Do not commit EA executable or assets.
 - Initialize each dungeon entry only once per client instead of repeating spawn and hero swaps on every debug ping.
 - Record actual enemy spawns and unique deaths for the DefeatAllMonsters mission objective; match the bundled Lua 95/75/50% medal thresholds. Actual client behavior remains to be verified.
 - Count distinct InteractWithObelisk actions, broadcast objective and interactable changes, and score from original Lua thresholds (3/2/1). Other scripted interactions still need reconstruction.
+- Track successful player-to-enemy damage per player and score DoDamageOften from Lua difficulty-scaled hit counts; score HugeDamage from Lua hit-count thresholds with provisional 1x health scaling until that multiplier is implemented. Replace fabricated medal totals with actual objective counts; loot probabilities and DNA amounts remain unverified.
 
 ## Verification matrix
 

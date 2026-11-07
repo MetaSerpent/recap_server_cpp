@@ -46,6 +46,10 @@ jobs:
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/enemy_clear_tracker_test.cpp -o /tmp/enemy_clear_tracker_test
           /tmp/enemy_clear_tracker_test
+      - name: Compile and test damage objective scoring
+        run: |
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/damage_objectives_test.cpp -o /tmp/damage_objectives_test
+          /tmp/damage_objectives_test
       - name: Compile and test token encoding
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/auth_token_test.cpp -o /tmp/auth_token_test

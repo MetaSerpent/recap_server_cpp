@@ -22,6 +22,7 @@
 #include <functional>
 #include <unordered_set>
 #include "enemy_clear_tracker.h"
+#include "damage_objectives.h"
 
 // Game
 namespace Game {
@@ -162,6 +163,7 @@ namespace Game {
 			void OnObjectCreate(const ObjectPtr& object);
 			void OnObjectDestroy(const ObjectPtr& object);
 			void OnObjectDeath(const ObjectPtr& object, bool critical, bool knockback);
+			void OnDamageDealt(const ObjectPtr& attacker, const ObjectPtr& victim, float appliedDamage);
 
 			void OnPlayerStart(const PlayerPtr& player);
 
@@ -223,6 +225,7 @@ namespace Game {
 
 			std::vector<RakNet::Objective> mObjectives;
 			EnemyClearTracker mEnemyClearTracker;
+			DamageObjectives mDamageObjectives;
 			std::unordered_set<uint32_t> mTouchedObelisks;
 			std::vector<ObjectPtr> mObjects;
 			std::vector<glm::vec3> mPlayerSpawnpoints;

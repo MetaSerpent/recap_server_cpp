@@ -90,6 +90,7 @@ namespace Game {
 		mMarkers.clear();
 		mPlayerSpawnpoints.clear();
 		mEnemyClearTracker.Reset();
+		mDamageObjectives.Reset();
 		mTouchedObelisks.clear();
 		for (auto& objective : mObjectives) {
 			objective.value = 0;
@@ -273,6 +274,43 @@ namespace Game {
 		//
 	}
 
+	void Instance::OnDamageDealt(const ObjectPtr& attacker, const ObjectPtr& victim, float appliedDamage) {
+		if (!attacker || !victim || !mGameStarted || !mServer ||
+			!attacker->IsPlayerControlled() || attacker->GetTeam() == victim->GetTeam()) {
+			return;
+		}
+		const auto& noun = victim->GetNoun();
+		if (!noun || !noun->GetNonPlayerClassData() || victim->IsPlayerControlled()) {
+			return;
+		}
+		const auto& player = attacker->GetPlayer();
+		if (!player) {
+			return;
+		}
+		const auto playerId = player->GetId();
+		// Health scaling for HugeDamage is still unimplemented in the server.
+		// A base scale of 1 is explicit, rather than fabricating a
+		// difficulty multiplier. Count only damage that actually removed HP.
+		if (!mDamageObjectives.RecordHit(playerId, appliedDamage, 1.0f)) {
+			return;
+		}
+		const auto& client = mServer->GetClient(playerId);
+		if (!client) {
+			return;
+		}
+		for (std::size_t i = 0; i < mObjectives.size(); ++i) {
+			auto& objective = mObjectives[i];
+			if (objective.id == utils::hash_id("DoDamageOften")) {
+				objective.value = mDamageObjectives.GetHitCount(playerId);
+			} else if (objective.id == utils::hash_id("HugeDamage")) {
+				objective.value = mDamageObjectives.GetHugeHitCount(playerId);
+			} else {
+				continue;
+			}
+			mServer->SendObjectiveUpdate(client, static_cast<uint8_t>(i), 0);
+		}
+	}
+
 	void Instance::OnObjectDeath(const ObjectPtr& object, bool critical, bool knockback) {
 		if (!object) {
 			return;
@@ -442,6 +480,15 @@ namespace Game {
 		// Set objectives
 		const auto& client = mServer->GetClient(player->GetId());
 		if (client) {
+			// The two damage objectives are player-specific in the original
+			// Lua scripts; present only this player's current counters.
+			for (auto& objective : mObjectives) {
+				if (objective.id == utils::hash_id("DoDamageOften")) {
+					objective.value = mDamageObjectives.GetHitCount(player->GetId());
+				} else if (objective.id == utils::hash_id("HugeDamage")) {
+					objective.value = mDamageObjectives.GetHugeHitCount(player->GetId());
+				}
+			}
 			mServer->SendObjectivesInitForLevel(client);
 			for (uint8_t i = 0, l = static_cast<uint8_t>(mObjectives.size()); i < l; ++i) {
 				mServer->SendObjectiveUpdate(client, i, 0);
@@ -1010,6 +1057,16 @@ namespace Game {
 						std::min<std::size_t>(mTouchedObelisks.size(), UINT32_MAX));
 					objective.medal = static_cast<RakNet::ObjectiveMedal>(
 						ObjectiveScoring::ScoreTouchedObelisks(mTouchedObelisks.size()));
+				} else if (objective.id == utils::hash_id("DoDamageOften")) {
+					objective.value = mDamageObjectives.GetHitCount(player->GetId());
+					const auto major = mChainData.GetLevelIndex() == 0 ? 0U :
+						std::min<uint32_t>(mChainData.GetMajorDifficulty(), 7U);
+					objective.medal = static_cast<RakNet::ObjectiveMedal>(
+						mDamageObjectives.ScoreDamageOften(player->GetId(), major));
+				} else if (objective.id == utils::hash_id("HugeDamage")) {
+					objective.value = mDamageObjectives.GetHugeHitCount(player->GetId());
+					objective.medal = static_cast<RakNet::ObjectiveMedal>(
+						mDamageObjectives.ScoreHugeDamage(player->GetId()));
 				}
 			}
 			// Inform the client about final objectives before it leaves the
@@ -1025,11 +1082,25 @@ namespace Game {
 			// placeholders, but report the number of planets actually completed.
 			mCashOutData.mDna = 50;
 			mCashOutData.mPlanetsCompleted = mChainData.GetProgression();
-			mCashOutData.mGoldMedals.fill(3);
-			mCashOutData.mSilverMedals.fill(1);
-			mCashOutData.mBronzeMedals.fill(4);
-			mCashOutData.mUniqueChances.fill(50);
-			mCashOutData.mRareChances.fill(30);
+			// Four wire slots correspond to player indices. Report real
+			// objective medal counts for the player who just completed the
+			// stage instead of broadcasting fabricated fixed awards.
+			if (player->GetId() < mCashOutData.mGoldMedals.size()) {
+				const auto index = player->GetId();
+				mCashOutData.mGoldMedals[index] = 0;
+				mCashOutData.mSilverMedals[index] = 0;
+				mCashOutData.mBronzeMedals[index] = 0;
+				for (const auto& objective : mObjectives) {
+					switch (objective.medal) {
+						case RakNet::ObjectiveMedal::Gold: ++mCashOutData.mGoldMedals[index]; break;
+						case RakNet::ObjectiveMedal::Silver: ++mCashOutData.mSilverMedals[index]; break;
+						case RakNet::ObjectiveMedal::Bronze: ++mCashOutData.mBronzeMedals[index]; break;
+						default: break;
+					}
+				}
+			}
+			// Rare/unique drop probabilities have not been reconstructed:
+			// leave them zero rather than reporting fictitious percentages.
 
 			mServer->SendReconnectPlayer(client, GameState::ChainVoting);
 			mServer->SendDebugPing(client);

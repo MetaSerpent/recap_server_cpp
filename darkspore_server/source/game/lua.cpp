@@ -1305,6 +1305,7 @@ namespace LuaFunction {
 				combatEvent.mTargetId = object->GetId();
 				combatEvent.mDirection = direction.value_or(glm::zero<glm::vec3>());
 
+				const float healthBeforeHit = object->GetHealth();
 				const auto& result = object->TakeDamage(
 					attributes,
 					std::make_tuple(damageRange.raw_get_or(1, 0.f), damageRange.raw_get_or(2, 0.f)),
@@ -1318,6 +1319,13 @@ namespace LuaFunction {
 
 				combatEvent.mDeltaHealth = std::get<1>(result);
 				combatEvent.mIntegerHpChange = static_cast<int32_t>(combatEvent.mDeltaHealth);
+
+				// Credit only the health actually removed from a living enemy.
+				// An overkill or a hit on a corpse is not another damage event.
+				if (attacker && healthBeforeHit > 0.f && std::get<0>(result)) {
+					game.OnDamageDealt(attacker, object,
+						std::max(0.f, healthBeforeHit - object->GetHealth()));
+				}
 
 				if (std::get<2>(result)) {
 					combatEvent.mFlags = Game::CombatEventFlags::Critical;
