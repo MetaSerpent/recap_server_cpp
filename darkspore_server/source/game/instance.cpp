@@ -8,6 +8,7 @@
 #include "catalyst.h"
 #include "scheduler.h"
 #include "mission_progression.h"
+#include "mission_results.h"
 #include "objective_scoring.h"
 
 #include "raknet/server.h"

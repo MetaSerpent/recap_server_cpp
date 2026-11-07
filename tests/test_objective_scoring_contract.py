@@ -31,12 +31,17 @@ class ObjectiveScoringContract(unittest.TestCase):
         self.assertNotIn("objective.medal = RakNet::ObjectiveMedal::Gold;", constructor)
 
     def test_completion_scores_from_real_elapsed_time(self):
-        method = GAME.split("void Instance::BeamOut(", 1)[1].split(
-            "void Instance::SendObjectCreate(", 1
+        snapshot = GAME.split("Instance::GetObjectivesForPlayer(", 1)[1].split(
+            "void Instance::OnDamageDealt(", 1
         )[0]
-        self.assertIn("ObjectiveScoring::ScoreFinishLevelQuickly(elapsedSeconds)", method)
-        self.assertLess(method.index("ScoreFinishLevelQuickly(elapsedSeconds)"),
-                        method.index("SendObjectivesComplete(client);"))
+        beam = GAME.split("void Instance::BeamOut(", 1)[1].split(
+            "bool Instance::SendObjectCreate(", 1
+        )[0]
+        self.assertIn("ObjectiveScoring::ScoreFinishLevelQuickly(seconds)", snapshot)
+        self.assertIn("GetTimeElapsed() / 1000", snapshot)
+        self.assertIn("GetObjectivesForPlayer(player->GetId(), true)", beam)
+        self.assertLess(beam.index("GetObjectivesForPlayer(player->GetId(), true)"),
+                        beam.index("SendObjectivesComplete(client);"))
 
 if __name__ == "__main__":
     unittest.main()
