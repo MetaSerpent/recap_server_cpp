@@ -249,6 +249,10 @@ namespace Game {
 		return mPart.get();
 	}
 
+	float LootData::GetDNAAmount() const {
+		return mDNAAmount;
+	}
+
 	void LootData::SetDNAAmount(float amount) {
 		mDNAAmount = amount;
 		mObject->SetFlags(mObject->GetFlags() | Object::Flags::UpdateLootData);

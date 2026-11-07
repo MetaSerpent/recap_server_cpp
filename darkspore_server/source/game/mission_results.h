@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <cmath>
+#include <optional>
 #include <utility>
 
 namespace Game::MissionResults {
@@ -37,6 +39,18 @@ namespace Game::MissionResults {
             }
         }
         return result;
+    }
+
+    // Loot DNA travels as a float in the original wire format. Reject
+    // malformed, non-finite, fractional-under-one and overflowing amounts
+    // before converting to a uint32_t. Whole-number truncation matches
+    // the network's discrete account balance.
+    inline std::optional<std::uint32_t> DecodeDnaPickup(float amount) noexcept {
+        if (!std::isfinite(amount) || amount < 1.f ||
+            static_cast<double>(amount) >= 4294967296.0) {
+            return std::nullopt;
+        }
+        return static_cast<std::uint32_t>(amount);
     }
 
     // Adding rewards cannot wrap the persistent account's uint32_t DNA.

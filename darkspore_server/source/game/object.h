@@ -124,6 +124,7 @@ namespace Game {
 
 			void SetPart(const SporeNet::Part& part);
 			const SporeNet::Part* GetPart() const;
+			float GetDNAAmount() const;
 			void SetDNAAmount(float amount);
 			void SetCatalyst(const Catalyst& catalyst);
 

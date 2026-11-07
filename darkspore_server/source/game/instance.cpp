@@ -1404,17 +1404,34 @@ namespace Game {
 			return;
 		}
 
-		// Only equipment loot carries a persistent SporeNet::Part. Catalyst
-		// and resource pickups follow their own inventory pathways.
-		if (const auto* part = lootData->GetPart()) {
+		// Equipment and DNA pickups must be committed atomically before
+		// the loot is consumed. The amount comes from server-owned LootData,
+		// never from an untrusted client packet.
+		const auto* part = lootData->GetPart();
+		const float dnaAmount = lootData->GetDNAAmount();
+		if (part || dnaAmount != 0.f) {
 			const auto& user = player->GetUser();
 			if (!user) {
 				return;
 			}
-			user->AddPart(*part);
+			auto& account = user->get_account();
+			const auto previousDna = account.dna;
+			if (dnaAmount != 0.f) {
+				const auto reward = MissionResults::DecodeDnaPickup(dnaAmount);
+				if (!reward) {
+					return;
+				}
+				account.dna = MissionResults::AddDna(previousDna, *reward);
+			}
+			if (part) {
+				user->AddPart(*part);
+			}
 			if (!user->Save()) {
-				// Preserve the world loot and restore the in-memory inventory.
-				user->get_parts().data().pop_back();
+				// Preserve the world loot and restore both in-memory balances.
+				account.dna = previousDna;
+				if (part) {
+					user->get_parts().data().pop_back();
+				}
 				return;
 			}
 		}
