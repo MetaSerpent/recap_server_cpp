@@ -142,15 +142,15 @@ namespace Game {
 
 				if (!minionNounName.empty()) {
 					auto noun = nounDatabase.Get(utils::hash_id(minionNounName));
-					if (auto npcData = noun->GetNonPlayerClassData()) {
-						std::cout << npcData->GetName() << std::endl;
+					if (noun && noun->GetNonPlayerClassData()) {
+						std::cout << noun->GetNonPlayerClassData()->GetName() << std::endl;
 					}
 				}
 
 				if (!specialNounName.empty()) {
 					auto noun = nounDatabase.Get(utils::hash_id(special.GetNounName()));
-					if (auto npcData = noun->GetNonPlayerClassData()) {
-						std::cout << npcData->GetName() << std::endl;
+					if (noun && noun->GetNonPlayerClassData()) {
+						std::cout << noun->GetNonPlayerClassData()->GetName() << std::endl;
 					}
 				}
 			}
@@ -356,14 +356,9 @@ namespace Game {
 						}
 
 						default:
-						{
-							std::cout << "Unknown enemy noun: '" << marker->GetNounName() << "'" << std::endl;
+							// Other marker types are not enemy spawners.
 							break;
-						}
 					}
-
-					// temporary
-					break;
 				}
 			};
 
@@ -852,6 +847,9 @@ namespace Game {
 	}
 
 	void Instance::BeamOut(const PlayerPtr& player) {
+		if (!player || !mServer) {
+			return;
+		}
 		const auto& client = mServer->GetClient(player->GetId());
 		if (client) {
 			mChainData.SetCompleted(true);
@@ -1079,10 +1077,10 @@ namespace Game {
 			return;
 		}
 
-		object->MarkForDeletion();
 		if (!object->HasLootData()) {
 			return;
 		}
+		object->MarkForDeletion();
 
 		ClientEvent lootEvent;
 		lootEvent.SetLootPickup(player->GetId(), *object->GetLootData());
@@ -1099,13 +1097,12 @@ namespace Game {
 
 		uint32_t slot = player->GetOpenCatalystSlot();
 		if (slot != 0xFFFFFFFF) {
-			object->MarkForDeletion();
-			
 			const auto& lootData = object->GetLootData();
 			if (!lootData) {
-				// Actual object contains no catalyst, ignore.
+				// Actual object contains no catalyst, ignore without deleting it.
 				return;
 			}
+			object->MarkForDeletion();
 
 			auto catalyst = Catalyst(*lootData);
 			player->SetCatalyst(catalyst, slot);

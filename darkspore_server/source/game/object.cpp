@@ -1412,8 +1412,11 @@ namespace Game {
 		}
 		
 		if (damage > 0) {
-			SetHealth(GetHealth() - damage);
-			if (GetHealth() <= 0) {
+			const float healthBeforeHit = GetHealth();
+			SetHealth(healthBeforeHit - damage);
+			// A corpse may receive additional hit packets. Only the first
+			// transition into zero health triggers a death event.
+			if (healthBeforeHit > 0.f && GetHealth() <= 0.f) {
 				GetGame().OnObjectDeath(shared_from_this(), critical, false);
 			}
 		}

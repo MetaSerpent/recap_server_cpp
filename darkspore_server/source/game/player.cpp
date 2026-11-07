@@ -344,7 +344,7 @@ namespace Game {
 	}
 
 	Catalyst Player::GetCatalyst(uint32_t index) const {
-		if (mCatalysts.size() < index) {
+		if (index >= mCatalysts.size()) {
 			return Catalyst();
 		}
 		return mCatalysts[index];
