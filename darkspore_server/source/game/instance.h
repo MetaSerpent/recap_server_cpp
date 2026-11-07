@@ -185,6 +185,9 @@ namespace Game {
 			void CancelAction(const PlayerPtr& player, const ObjectPtr& object);
 
 			// Loot
+			// Called by the original nGameObject.DNAPickup Lua callback.
+			// Accept only server-created DNA loot and the live player's hero.
+			bool PickupDNA(const ObjectPtr& loot, const ObjectPtr& character);
 			void DropLoot(const PlayerPtr& player, uint64_t lootInstanceId);
 			void DropLoot(const ObjectPtr& object, const ObjectPtr& targetObject, DropType dropType);
 			void DropLoot();

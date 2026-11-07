@@ -866,6 +866,29 @@ namespace Game {
 		*/
 	}
 
+	bool Instance::PickupDNA(const ObjectPtr& loot, const ObjectPtr& character) {
+		if (!mObjectManager || !mServer || !loot || !character ||
+			loot->IsMarkedForDeletion() || character->IsMarkedForDeletion() ||
+			loot->GetNounId() != utils::hash_id("DNA.noun") ||
+			mObjectManager->Get(loot->GetId()) != loot ||
+			mObjectManager->Get(character->GetId()) != character ||
+			!character->IsPlayerControlled() || character->GetHealth() <= 0.f) {
+			return false;
+		}
+		const auto& player = character->GetPlayer();
+		const auto& lootData = loot->GetLootData();
+		if (!player || player->GetDeployedCharacterObject() != character ||
+			!lootData || lootData->GetPart() ||
+			!MissionResults::DecodeDnaPickup(lootData->GetDNAAmount())) {
+			return false;
+		}
+
+		// PickupLoot performs one durable save, rolls back on failure, and
+		// marks the world object for deletion only after success.
+		PickupLoot(player, loot);
+		return loot->IsMarkedForDeletion();
+	}
+
 	void Instance::DropLoot(const PlayerPtr& player, uint64_t lootInstanceId) {
 		if (!player) {
 			return;

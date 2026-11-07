@@ -1530,6 +1530,19 @@ namespace Game {
 		RegisterPlayer();
 		RegisterAttributes();
 		RegisterObject();
+
+		// The original DNA_Follow.lua invokes nGameObject.DNAPickup.
+		// LuaBase creates this table, but its legacy method was missing.
+		// Resolve both object handles against the active server world;
+		// all ownership and amount validation occurs in PickupDNA.
+		auto gameObject = mState["nGameObject"].get<sol::table>();
+		gameObject["DNAPickup"] = [this](sol::object lootValue, sol::object characterValue) {
+			auto& manager = mGame.GetObjectManager();
+			auto loot = LuaGetObject(manager, lootValue);
+			auto character = LuaGetObject(manager, characterValue);
+			return mGame.PickupDNA(loot, character);
+		};
+
 		RegisterAbility();
 		RegisterObjective();
 		RegisterTriggerVolume();
