@@ -38,6 +38,10 @@ jobs:
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/mission_results_test.cpp -o /tmp/mission_results_test
           /tmp/mission_results_test
+      - name: Compile and test cash-out reward planning
+        run: |
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/cashout_rewards_test.cpp -o /tmp/cashout_rewards_test
+          /tmp/cashout_rewards_test
       - name: Compile and test original mission timing medals
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/objective_scoring_test.cpp -o /tmp/objective_scoring_test

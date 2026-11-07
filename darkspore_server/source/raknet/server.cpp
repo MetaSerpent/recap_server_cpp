@@ -918,20 +918,9 @@ namespace RakNet {
 					SendChainVoteMessages(client, 1);
 				} else if (value == 2 && client->GetGameState() == GameState::ChainVoting &&
 					mGame.GetChainData().IsCompleted()) {
-					// Cash-out is the reward commit boundary. Save before
-					// acknowledging, so disconnections and repeated votes cannot
-					// silently create or duplicate DNA.
-					const auto& user = client->GetUser();
-					if (!user) {
-						break;
-					}
-					const uint32_t reward = mGame.GetCashOutData().GetDna();
-					auto& account = user->get_account();
-					const auto previousDna = account.dna;
-					account.dna = Game::MissionResults::AddDna(
-						account.dna, reward);
-					if (!user->Save()) {
-						account.dna = previousDna;
+					// Account receipt ID, parts and DNA are saved together.
+					// A retry must not grant the same rewards a second time.
+					if (!mGame.CommitCashOut(client->GetPlayer())) {
 						break;
 					}
 					SendChainVoteMessages(client, value);

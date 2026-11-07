@@ -94,6 +94,7 @@ namespace SporeNet {
 		newPlayerInventory = utils::xml_get_text_node<uint32_t>(account, "new_player_inventory");
 		newPlayerProgress = utils::xml_get_text_node<uint32_t>(account, "new_player_progress");
 
+		lastCashOutReceiptId = utils::xml_get_text_node<uint64_t>(account, "last_cashout_receipt_id");
 		cashoutBonusTime = utils::xml_get_text_node<uint32_t>(account, "cashout_bonus_time");
 		starLevel = utils::xml_get_text_node<uint32_t>(account, "star_level");
 
@@ -127,6 +128,7 @@ namespace SporeNet {
 		utils::xml_add_text_node(node, "id", id);
 		utils::xml_add_text_node(node, "new_player_inventory", newPlayerInventory);
 		utils::xml_add_text_node(node, "new_player_progress", newPlayerProgress);
+		utils::xml_add_text_node(node, "last_cashout_receipt_id", lastCashOutReceiptId);
 		utils::xml_add_text_node(node, "cashout_bonus_time", cashoutBonusTime);
 		utils::xml_add_text_node(node, "star_level", starLevel);
 		utils::xml_add_text_node(node, "unlock_catalysts", unlockCatalysts);

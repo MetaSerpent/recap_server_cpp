@@ -27,9 +27,8 @@ class MissionCompletionContract(unittest.TestCase):
             "void Server::OnCrystalDragMessage(", 1
         )[0]
         self.assertIn("mGame.GetChainData().IsCompleted()", block)
-        self.assertIn("Game::MissionResults::AddDna(", block)
-        self.assertIn("account.dna = previousDna;", block)
-        self.assertLess(block.index("if (!user->Save())"),
+        self.assertIn("mGame.CommitCashOut(client->GetPlayer())", block)
+        self.assertLess(block.index("mGame.CommitCashOut(client->GetPlayer())"),
                         block.index("SendChainVoteMessages(client, value);", block.index("} else if (value == 2")))
 
     def test_repeated_or_out_of_dungeon_status_cannot_beam_out(self):

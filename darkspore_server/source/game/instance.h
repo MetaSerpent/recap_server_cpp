@@ -210,6 +210,7 @@ namespace Game {
 
 			//
 			void BeamOut(const PlayerPtr& player);
+			bool CommitCashOut(const PlayerPtr& player);
 
 			// Server stuff
 			void AddEffect();
@@ -256,6 +257,8 @@ namespace Game {
 
 			Blaze::ReplicatedGameData mData {};
 
+			// Cryptographically random per-chain token; stable across planets.
+			uint64_t mRunNonce = 0;
 			uint64_t mGameStartTime = 0;
 			uint64_t mGameTime = 0;
 			uint64_t mGameTimeLua = 0;

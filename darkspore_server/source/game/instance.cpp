@@ -9,6 +9,7 @@
 #include "scheduler.h"
 #include "mission_progression.h"
 #include "mission_results.h"
+#include "cashout_rewards.h"
 #include "objective_scoring.h"
 
 #include "raknet/server.h"
@@ -18,6 +19,8 @@
 
 #include <iostream>
 #include <array>
+#include <openssl/rand.h>
+#include <vector>
 
 /*
 	eeh... maybe not
@@ -109,6 +112,10 @@ namespace Game {
 
 	bool Instance::Start() {
 		Stop();
+		if (RAND_bytes(reinterpret_cast<unsigned char*>(&mRunNonce),
+			static_cast<int>(sizeof(mRunNonce))) != 1 || mRunNonce == 0) {
+			return false;
+		}
 		// A restarted instance must rebuild its level and object graph.
 		mGameStarted = false;
 		mLevelLoaded = false;
@@ -230,6 +237,12 @@ namespace Game {
 				mChainData.GetProgression(), mChainData.GetLevelIndex()))) {
 			return false;
 		}
+		uint64_t newNonce = mRunNonce;
+		if (startNewChain &&
+			(RAND_bytes(reinterpret_cast<unsigned char*>(&newNonce),
+				static_cast<int>(sizeof(newNonce))) != 1 || newNonce == 0)) {
+			return false;
+		}
 		for (const auto& [_, client] : mServer->GetClients()) {
 			if (!client || client->GetId() == requestingPlayer) {
 				continue;
@@ -272,6 +285,7 @@ namespace Game {
 		if (startNewChain) {
 			// Cash-out followed by a fresh lobby deployment begins a new
 			// run, not another planet of the previous completed chain.
+			mRunNonce = newNonce;
 			mChainData = RakNet::ChainVoteData{};
 			mCashOutData = CashOutData{};
 		} else {
@@ -1179,6 +1193,92 @@ namespace Game {
 			mObjects.push_back(std::move(object));
 			position.x += 5;
 		}
+	}
+
+	bool Instance::CommitCashOut(const PlayerPtr& player) {
+		if (!player || !mServer || !mChainData.IsCompleted() ||
+			!mScoredPlayers.contains(player->GetId()) || mRunNonce == 0) {
+			return false;
+		}
+		const auto slot = player->GetId();
+		if (slot >= mCashOutData.mRewards.size()) {
+			return false;
+		}
+		const auto& user = player->GetUser();
+		if (!user || user->get_id() <= 0) {
+			return false;
+		}
+		auto& account = user->get_account();
+		const uint64_t receiptId = MissionResults::MakeCashOutReceiptId(
+			mRunNonce, static_cast<uint64_t>(user->get_id()));
+		// A prior successful account save already committed the rewards.
+		// The packet can be sent again without touching inventory or DNA.
+		if (account.lastCashOutReceiptId == receiptId) {
+			return true;
+		}
+
+		const uint32_t planets = mCashOutData.mPlanetsCompleted;
+		const uint32_t stage = mChainData.GetLevelIndex();
+		const std::size_t count = stage == 0 ? 0 :
+			MissionResults::CashOutRewardCount(planets);
+		const uint32_t level = MissionResults::CashOutRewardLevel(stage, planets);
+		if (count > mCashOutData.mRewards[slot].size() || level > UINT16_MAX) {
+			return false;
+		}
+		const MissionResults::RarityBoundaries bands {
+			mCashOutData.mUpperRarityBoundaries[slot],
+			mCashOutData.mLowerRarityBoundaries[slot]
+		};
+		std::array<CashOutData::Reward, 4> receiptItems {};
+		std::vector<SporeNet::Part> parts;
+		parts.reserve(count);
+		for (std::size_t i = 0; i < count; ++i) {
+			const auto roll = MissionResults::CashOutRewardRoll(receiptId, i);
+			const auto rarity = MissionResults::CashOutRewardRarity(roll, bands);
+			if (rarity == 0 || roll == 0) {
+				return false;
+			}
+			// Interim valid rigblocks, selected deterministically from the
+			// supported range. Class/element-specific source tables remain
+			// to be extracted from the original asset database.
+			SporeNet::Part part(MissionResults::CashOutRigblock(receiptId, i));
+			part.SetLevel(static_cast<uint16_t>(level));
+			part.SetRarity(static_cast<SporeNet::PartRarity>(rarity));
+			part.SetCreationDate(utils::get_unix_time());
+			receiptItems[i] = {
+				part.GetRigblockAssetHash(),
+				part.GetSuffixAssetHash(),
+				part.GetPrefixAssetHash(),
+				part.GetPrefixSecondaryAssetHash(),
+				static_cast<int32_t>(level),
+				static_cast<int32_t>(rarity),
+				static_cast<int32_t>(roll)
+			};
+			parts.emplace_back(std::move(part));
+		}
+
+		const auto previousReceiptId = account.lastCashOutReceiptId;
+		const auto previousDna = account.dna;
+		const auto initialPartCount = user->get_parts().size();
+		const auto experience = account.xp;
+		account.lastCashOutReceiptId = receiptId;
+		account.dna = MissionResults::AddDna(account.dna, mCashOutData.mDna);
+		for (const auto& part : parts) {
+			user->AddPart(part);
+		}
+		if (!user->Save()) {
+			// One atomic disk snapshot: never consume a receipt if the
+			// inventory/account write fails.
+			account.lastCashOutReceiptId = previousReceiptId;
+			account.dna = previousDna;
+			user->get_parts().data().resize(initialPartCount);
+			return false;
+		}
+		// Publish only a successful durable receipt to the client.
+		mCashOutData.mRewards[slot] = receiptItems;
+		mCashOutData.mStartingExperiences[slot] = experience;
+		mCashOutData.mFinalExperiences[slot] = account.xp;
+		return true;
 	}
 
 	void Instance::BeamOut(const PlayerPtr& player) {

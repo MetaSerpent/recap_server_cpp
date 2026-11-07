@@ -52,6 +52,9 @@ namespace SporeNet {
 		uint32_t newPlayerInventory = 0;
 		uint32_t newPlayerProgress = 0;
 
+		// Idempotent reward settlement token. Stored with the inventory and
+		// DNA so reconnecting clients cannot claim one chain twice.
+		uint64_t lastCashOutReceiptId = 0;
 		uint32_t cashoutBonusTime = 0;
 		uint32_t starLevel = 0;
 
