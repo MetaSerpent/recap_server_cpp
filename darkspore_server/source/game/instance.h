@@ -20,6 +20,7 @@
 #include <set>
 #include <memory>
 #include <functional>
+#include "enemy_clear_tracker.h"
 
 // Game
 namespace Game {
@@ -220,6 +221,7 @@ namespace Game {
 			std::set<uint32_t> mEvents;
 
 			std::vector<RakNet::Objective> mObjectives;
+			EnemyClearTracker mEnemyClearTracker;
 			std::vector<ObjectPtr> mObjects;
 			std::vector<glm::vec3> mPlayerSpawnpoints;
 

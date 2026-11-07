@@ -17,6 +17,7 @@ Darkspore installation and launcher. Do not commit EA executable or assets.
 - Join the data loading worker before server shutdown and close every instantiated service.
 - Normalize an empty STORAGE_PATH to the existing storage/ default.
 - Initialize each dungeon entry only once per client instead of repeating spawn and hero swaps on every debug ping.
+- Record actual enemy spawns and unique deaths for the DefeatAllMonsters mission objective; match the bundled Lua 95/75/50% medal thresholds. Actual client behavior remains to be verified.
 
 ## Verification matrix
 

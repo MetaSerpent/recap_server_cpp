@@ -89,6 +89,7 @@ namespace Game {
 		mLevelLoaded = false;
 		mMarkers.clear();
 		mPlayerSpawnpoints.clear();
+		mEnemyClearTracker.Reset();
 		for (auto& objective : mObjectives) {
 			objective.value = 0;
 			objective.medal = RakNet::ObjectiveMedal::InProgress;
@@ -276,6 +277,28 @@ namespace Game {
 			return;
 		}
 		object->OnDeath();
+
+		// Count only enemies whose world-spawn was already registered.
+		// Corpses and repeated kill notifications must never raise the score.
+		if (mEnemyClearTracker.RecordDeath(object->GetId())) {
+			for (std::size_t i = 0; i < mObjectives.size(); ++i) {
+				auto& objective = mObjectives[i];
+				if (objective.id == utils::hash_id("DefeatAllMonsters")) {
+					const uint32_t percent = mEnemyClearTracker.GetKillPercent();
+					if (objective.value != percent) {
+						objective.value = percent;
+						if (mServer) {
+							for (const auto& [_, client] : mServer->GetClients()) {
+								if (client) {
+									mServer->SendObjectiveUpdate(client, static_cast<uint8_t>(i), 0);
+								}
+							}
+						}
+					}
+					break;
+				}
+			}
+		}
 
 		SendObjectGfxState(object, utils::hash_id("dead"));
 
@@ -939,6 +962,16 @@ namespace Game {
 				speed.medal = static_cast<RakNet::ObjectiveMedal>(
 					ObjectiveScoring::ScoreFinishLevelQuickly(elapsedSeconds));
 			}
+			// Original objective_DefeatAllMonsters.lua awards medals at
+			// 95/75/50 percent of spawned enemies killed. Unseen or
+			// repeatedly killed objects cannot inflate this result.
+			for (auto& objective : mObjectives) {
+				if (objective.id == utils::hash_id("DefeatAllMonsters")) {
+					objective.value = mEnemyClearTracker.GetKillPercent();
+					objective.medal = static_cast<RakNet::ObjectiveMedal>(
+						mEnemyClearTracker.GetMedal());
+				}
+			}
 			// Inform the client about final objectives before it leaves the
 			// dungeon. Cash-out data is handled by the subsequent vote.
 			mServer->SendObjectivesComplete(client);
@@ -993,6 +1026,13 @@ namespace Game {
 #else
 		if (!mGameStarted) {
 			return false;
+		}
+
+		// Record real NPC spawns once; multiple clients may request the
+		// same create packet, and hero objects are not enemy objectives.
+		const auto& noun = object->GetNoun();
+		if (noun && noun->GetNonPlayerClassData() && !object->IsPlayerControlled()) {
+			mEnemyClearTracker.RegisterSpawn(object->GetId());
 		}
 
 		auto flags = object->GetFlags();
