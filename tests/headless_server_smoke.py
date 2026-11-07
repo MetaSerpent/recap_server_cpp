@@ -15,6 +15,7 @@ import subprocess
 import tempfile
 import time
 import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET
 
 PORT_KEYS = (
     "SERVER_REDIRECTOR_PORT", "SERVER_BLAZE_PORT", "SERVER_PSS_PORT",
@@ -72,6 +73,42 @@ def verify_http_routes(port: int) -> None:
         raise RuntimeError(f"Illegal HTTP path returned HTTP {status}, expected 400")
 
 
+def verify_registration_roundtrip(port: int, cwd: Path) -> None:
+    # This exercises the real registration API and two successive on-disk
+    # saves. Accounts exist only in TemporaryDirectory and are discarded.
+    base = "/recap/api?method=api.game.registration"
+    registration = (
+        base + "&name=SmokePlayer&email=smoke@example.invalid"
+        + "&pass=ephemeral-password&avatar=0"
+    )
+    status, body = query_server(port, registration)
+    if status != 200 or json.loads(body).get("success") is not True:
+        raise RuntimeError(f"Local registration failed: HTTP {status}, {body[:300]!r}")
+
+    saved = cwd / "storage/user/smoke@example.invalid.xml"
+    if not saved.is_file():
+        raise RuntimeError("Registration was acknowledged but no account XML was persisted")
+    document = ET.parse(saved)
+    if document.getroot().findtext("name") != "SmokePlayer":
+        raise RuntimeError("Saved account XML lost the registration name")
+    if not document.getroot().find("account") is not None:
+        raise RuntimeError("Registered account has no persisted account state")
+    initial_bytes = saved.read_bytes()
+
+    # Duplicate registration must be rejected without overwriting a save.
+    status, _ = query_server(port, registration)
+    if status == 200 or saved.read_bytes() != initial_bytes:
+        raise RuntimeError("Duplicate registration accepted or corrupted existing user XML")
+
+    # Invalid avatar input must fail before touching any account file.
+    status, _ = query_server(
+        port, base + "&name=BadAvatar&email=badavatar@example.invalid"
+        + "&pass=ephemeral-password&avatar=not-a-number"
+    )
+    if status == 200 or (cwd / "storage/user/badavatar@example.invalid.xml").exists():
+        raise RuntimeError("Invalid avatar caused a partial account to be registered")
+
+
 def smoke(server: Path, data: Path) -> None:
     server, data = server.resolve(), data.resolve()
     if not server.is_file() or not data.is_dir():
@@ -106,11 +143,12 @@ def smoke(server: Path, data: Path) -> None:
                 if not ready:
                     raise RuntimeError("Headless server did not bind an HTTP listener")
                 verify_http_routes(ports["SERVER_HTTP_PORT"])
+                verify_registration_roundtrip(ports["SERVER_HTTP_PORT"], cwd)
                 proc.terminate()
                 code = proc.wait(timeout=20)
                 if code != 0:
                     raise RuntimeError(f"Headless server crashed on SIGTERM: exit={code}")
-                print("Headless server served launcher/game APIs, rejected bad requests and shut down cleanly")
+                print("Headless server passed HTTP APIs, local account registration/persistence and clean shutdown")
             finally:
                 if proc.poll() is None:
                     proc.kill()
