@@ -94,5 +94,6 @@
     "xtr1common": "cpp",
     "xtree": "cpp",
     "xutility": "cpp"
-  }
+  },
+  "cmake.sourceDirectory": "D:/Documentos/.Code/DarkSpore/darkspore_server"
 }

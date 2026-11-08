@@ -3,6 +3,7 @@
 //
 
 #include "installer.h"
+#include "game/lua51_transpiler.h"
 
 #include <iostream>
 #include <fstream>
@@ -12,10 +13,66 @@
 bool Installer::running = false;
 std::string Installer::label = "";
 
+namespace {
+	void TranspileServerDataDirectory(const std::filesystem::path& serverDataRoot, const std::filesystem::path& outputRoot, const std::string& unluac) {
+		if (!std::filesystem::exists(serverDataRoot)) {
+			return;
+		}
+		for (auto& entry : std::filesystem::recursive_directory_iterator(serverDataRoot)) {
+			if (!entry.is_regular_file() || entry.path().extension() != ".lua") {
+				continue;
+			}
+			std::string relativePath = std::filesystem::relative(entry.path(), serverDataRoot).string();
+			std::filesystem::path outputPath = outputRoot / relativePath;
+			std::filesystem::create_directories(outputPath.parent_path());
+
+			const std::string stem = entry.path().stem().string();
+			if (stem == "ability_citadel_boss_launch") {
+				std::ofstream out(outputPath, std::ios::binary | std::ios::trunc);
+				const auto clean = Game::Lua51Transpiler::GetCleanCitadelBossLaunchLua();
+				out.write(clean.data(), static_cast<std::streamsize>(clean.size()));
+				continue;
+			}
+			if (stem == "template_ability_cone") {
+				std::ofstream out(outputPath, std::ios::binary | std::ios::trunc);
+				const auto clean = Game::Lua51Transpiler::GetCleanTemplateAbilityConeLua();
+				out.write(clean.data(), static_cast<std::streamsize>(clean.size()));
+				continue;
+			}
+
+			if (!Game::Lua51Transpiler::TranspileFile(entry.path(), outputPath)) {
+				std::string command = unluac + " \"" + entry.path().string() + "\" > \"" + outputPath.string() + "\"";
+				Installer::RunCommand(command);
+			}
+		}
+	}
+}
+
 void Installer::LoadDarksporeData(std::string darksporeInstallPath, std::string darksporeInstallVersion)
 {
 	const auto& serverDataVersionBinPath = "data/serverdata/version_bin.txt";
 	if (std::filesystem::exists(serverDataVersionBinPath)) {
+		const std::filesystem::path serverDataPkg = std::filesystem::path(darksporeInstallPath) / "Data" / "ServerData.package";
+		if (!std::filesystem::exists("data/serverdata/Modifiers") && std::filesystem::exists(serverDataPkg)) {
+			label = "Updating Lua scripts and Modifiers from ServerData.package...";
+			std::cout << "Updating Lua scripts and Modifiers from ServerData.package..." << std::endl;
+#ifdef _WIN32
+			std::string dbpf_unpacker = "dbpf_unpacker.exe";
+			std::string unluac = "unluac.exe";
+			RunCommand(dbpf_unpacker + " \"" + serverDataPkg.string() + "\" " + R"(ServerData\)");
+#else
+			std::string dbpf_unpacker = "./dbpf_unpacker";
+			std::string unluac = "./unluac";
+			RunCommand(dbpf_unpacker + " \"" + serverDataPkg.string() + "\" ./ServerData/");
+#endif
+			TranspileServerDataDirectory("ServerData", "ServerData_final", unluac);
+			std::filesystem::remove_all("./ServerData");
+			MergeDirectories("./ServerData_final/lua", "./data/serverdata/lua");
+			MergeDirectories("./ServerData_final/Abilities", "./data/serverdata/Abilities");
+			MergeDirectories("./ServerData_final/Modifiers", "./data/serverdata/Modifiers");
+			MergeDirectories("./ServerData_final/behaviors", "./data/serverdata/behaviors");
+			std::filesystem::remove_all("./ServerData_final");
+		}
 		label = "Server files are ready.";
 		std::cout << "Server files are ready." << std::endl;
 		return;
@@ -36,16 +93,7 @@ void Installer::LoadDarksporeData(std::string darksporeInstallPath, std::string 
 
 	// Step 2: Decompile .lua files
 	std::cout << "Decompiling Lua scripts from ServerData..." << std::endl;
-	for (auto& entry : std::filesystem::recursive_directory_iterator("ServerData")) {
-		if (entry.is_regular_file() && entry.path().extension() == ".lua") {
-			std::string relativePath = std::filesystem::relative(entry.path(), "ServerData").string();
-			std::filesystem::path outputPath = std::filesystem::path("ServerData_final") / relativePath;
-			std::filesystem::create_directories(outputPath.parent_path());
-
-			std::string command = unluac + " \"" + entry.path().string() + "\" > \"" + outputPath.string() + "\"";
-			RunCommand(command);
-		}
-	}
+	TranspileServerDataDirectory("ServerData", "ServerData_final", unluac);
 
 	// Step 3: Parse binary assets
 	std::cout << "Parsing binary assets from AssetData_Binary..." << std::endl;
@@ -66,16 +114,7 @@ void Installer::LoadDarksporeData(std::string darksporeInstallPath, std::string 
 	// Step 2: Decompile .lua files
 	label = "Decompiling Lua scripts from ServerData...";
 	std::cout << "Decompiling Lua scripts from ServerData..." << std::endl;
-	for (auto& entry : std::filesystem::recursive_directory_iterator("./ServerData")) {
-		if (entry.is_regular_file() && entry.path().extension() == ".lua") {
-			std::string relativePath = std::filesystem::relative(entry.path(), "./ServerData").string();
-			std::filesystem::path outputPath = std::filesystem::path("./ServerData_final") / relativePath;
-			std::filesystem::create_directories(outputPath.parent_path());
-
-			std::string command = unluac + " \"" + entry.path().string() + "\" > \"" + outputPath.string() + "\"";
-			RunCommand(command);
-		}
-	}
+	TranspileServerDataDirectory("./ServerData", "./ServerData_final", unluac);
 
 	// Step 3: Parse binary assets
 	label = "Parsing binary assets from AssetData_Binary...";
@@ -93,6 +132,8 @@ void Installer::LoadDarksporeData(std::string darksporeInstallPath, std::string 
 	label = "Moving new files to the correct place...";
 	MergeDirectories("./ServerData_final/lua", "./data/serverdata/lua");
 	MergeDirectories("./ServerData_final/Abilities", "./data/serverdata/Abilities");
+	MergeDirectories("./ServerData_final/Modifiers", "./data/serverdata/Modifiers");
+	MergeDirectories("./ServerData_final/behaviors", "./data/serverdata/behaviors");
 	std::filesystem::remove_all("./ServerData_final");
 
 	std::ofstream(serverDataVersionBinPath) << darksporeInstallVersion;
@@ -120,6 +161,9 @@ void Installer::RunCommand(const std::string& cmd) {
 }
 
 void Installer::MergeDirectories(const std::filesystem::path& source, const std::filesystem::path& destination) {
+	if (!std::filesystem::exists(source)) {
+		return;
+	}
 	for (const auto& entry : std::filesystem::recursive_directory_iterator(source)) {
 		if (entry.is_directory()) continue;
 

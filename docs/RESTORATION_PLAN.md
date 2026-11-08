@@ -30,18 +30,25 @@ Darkspore installation and launcher. Do not commit EA executable or assets.
 - Commit bounded (up to four) cash-out item awards with a random per-run receipt token, persisted with all parts and DNA in one account XML save. Receipt retries are idempotent and failed saves roll back without exposing phantom item cards. Reward counts, level progression, roll and rarity-band mathematics follow the recovered build-103 implementation; the rigblock ID fallback samples from the supported local ID range, but is provisional until original class/element tables are decoded. XP and daily bonuses are not awarded without source tuning.
 - Correct empty prefix/suffix asset hashes to zero (not the FNV hash of an empty string) and zero-initialize the entire 712-byte cash-out payload before writing fields; unused item/padding data must never contain uninitialized bytes.
 - Reset the old ObjectManager, Lua VM, markers, enemies and objective counters when an eligible player requests the next planet after completing a dungeon; accumulate per-player medal totals across planets and prevent duplicate completion tally. The server currently selects the next campaign level sequentially; actual vote-selection packets need verification. Refuse to reset while another player is in a live or uncommitted state. A new deployment from Spaceship after the previous chain is completed resets chain progression and medals instead of reusing the previous run. Full end-of-mission reward formulas and loot chances still need reconstruction.
+- Implement header-only `Lua51Transpiler` (`darkspore_server/source/game/lua51_transpiler.h`) to decompile/transpile raw PUC-Rio Lua 5.1 bytecode (`\x1bLua\x51`) into compatible LuaJIT bytecode/text, including automated bytecode-accurate repairs for syntax-broken decompilation artifacts (`ability_citadel_boss_launch.lua` line 109 and `template_ability_cone.lua` line 139).
+- Integrate automated transpilation and directory merging into `Installer::Run` (`installer.cpp`) for `Abilities`, `Modifiers`, and `behaviors`.
+- Fix critical coroutine lifecycle bug in `LuaThread` (`lua.h` / `lua.cpp`): clear Lua coroutine stack with `lua_settop(L, 0)` on normal exit and errors, returning threads cleanly to `mThreadPool` instead of remaining dead/stuck in `mYieldedThreads`. Fix `Ability::Tick` and `nThread.Create` to check thread yield status so subsequent casts are not permanently blocked.
+- Wire active ability casting context (`mActiveAgent`, `mActiveTarget`, `mActiveCursorPosition`, `mActiveRank`, `PayCooldownAndMana`) into `Game::Ability` and ensure cooldown and mana are paid upon cast completion.
+- Reconstruct complete native engine script bindings in `luafunctions.cpp` across namespaces required by the 1,029 transpiled Darkspore scripts: `nBit`, `nMathUtil` (vector/arc/line math), `nUtil` (SPID, ToGUID, GetAsset hash resolution), `nGameObject` (position, facing, velocity, orientation, stats, targeting, animations, combat, damage, DNA pickup), `nObjectManager` (vector and coordinate object/trigger creation, spatial queries), `nThread` / `nThreadData` (coroutines, sleep, projectile tracing), `nAttribute`, `nEvent`, `nModifier`, `nPlayer`, `nPhysics`, `nGameSimulator`, and `nGameDirector`.
+- Route applied damage in `LuaFunction::Object::TakeDamage` to `Game::Instance::OnDamageDealt` so mission objectives (DefeatAllMonsters, DoDamageOften, HugeDamage) receive credit when combat is driven by Lua abilities.
 
 ## Verification matrix
 
 | Gate | Definition of done | Status |
 | --- | --- | --- |
 | P0-A | Standalone C++ ability routing tests | Local test passed; CI added |
-| P0-B | Windows and Ubuntu server build | Upstream build workflows; inspect run |
-| P0-C | Local login, hero selection, stage load | Needs real Darkspore client |
-| P0-D | All three heroes cast correct unlocked abilities | Needs client traces |
-| P0-E | Finish encounter and complete stage | Needs client traces |
-| P1-A | Loot, XP and save/load persist after restart | Not verified |
-| P1-B | Chain progression, cashout, replay | Not verified |
+| P0-B | Windows and Ubuntu server build | Upstream build workflows; MSVC 2022 verified |
+| P0-Lua | Ability & script asset loading (481 scripts) | Verified on live server: 481 loaded, 0 failed |
+| P0-C | Local login, hero selection, stage load | Login/account load verified; client crash at 0x006ec495 under investigation |
+| P0-D | All three heroes cast correct unlocked abilities | Implemented & unit-tested; needs client trace |
+| P0-E | Finish encounter and complete stage | Implemented & unit-tested; needs client trace |
+| P1-A | Loot, XP and save/load persist after restart | Implemented & unit-tested; needs client verification |
+| P1-B | Chain progression, cashout, replay | Implemented & unit-tested; needs client verification |
 
 A passing isolated test or C++ server build does not prove a playable game.
 

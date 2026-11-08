@@ -57,6 +57,8 @@ namespace Game {
 					std::cout << "LuaThread::call()" << std::endl;
 					std::cout << err.what() << std::endl;
 					std::cout << std::to_underlying(mCoroutine.status()) << std::endl;
+					lua_settop(lua_state(), 0);
+					mLua.ReturnThreadToPool(this);
 				}
 
 				if constexpr (!std::is_void_v<Result>) {
@@ -70,12 +72,16 @@ namespace Game {
 				return call<Result>(func, std::forward<Args>(args)...);
 			}
 
+			void set_owner_object(const ObjectPtr& object) { mOwnerObject = object; }
+			const ObjectPtr& get_owner_object() const { return mOwnerObject; }
+
 		private:
 			void create(const sol::function& func);
 			void post_call();
 		
 		private:
 			Lua& mLua;
+			ObjectPtr mOwnerObject;
 			
 			std::unordered_map<std::string, sol::object> mValues;
 
@@ -197,6 +203,7 @@ namespace Game {
 			}
 
 			void ReturnThreadToPool(LuaThread* thread);
+			void SetLastRegisteredAbility(const AbilityPtr& ability) { mLastRegisteredAbility = ability; }
 
 		private:
 			// luafunctions.cpp
@@ -219,6 +226,7 @@ namespace Game {
 
 			std::unordered_map<lua_State*, LuaThread*> mThreads;
 			std::unordered_map<uint32_t, AbilityPtr> mAbilities;
+			AbilityPtr mLastRegisteredAbility;
 			std::unordered_map<uint32_t, sol::table> mPrivateTables;
 
 			std::unordered_set<LuaThread*> mYieldedThreads;
@@ -233,6 +241,9 @@ namespace Game {
 			virtual ~Coroutine() = default;
 
 			void Reload();
+
+			const sol::table& GetTable() const { return mSelf; }
+			const sol::environment& GetEnvironment() const { return mEnvironment; }
 
 		protected:
 			template<typename Result, typename... Args>
@@ -258,6 +269,8 @@ namespace Game {
 		public:
 			Ability(Lua& lua, sol::table&& self, const std::string& name, uint32_t id);
 
+			void BindFunctions();
+
 			// properties
 			const std::string& GetName() const;
 
@@ -270,6 +283,13 @@ namespace Game {
 			bool RequiresAgent() const;
 			bool HasGlobalCooldown() const;
 			bool ShouldPursue() const;
+
+			ObjectPtr GetActiveAgent() const { return mActiveAgent; }
+			ObjectPtr GetActiveTarget() const { return mActiveTarget; }
+			const glm::vec3& GetActiveCursorPosition() const { return mActiveCursorPosition; }
+			int32_t GetActiveRank() const { return mActiveRank; }
+
+			void PayCooldownAndMana() const;
 
 			// methods
 			float GetManaCost(const ObjectPtr& object, int32_t rank, float value) const;
@@ -302,6 +322,12 @@ namespace Game {
 			bool mRequiresAgent { false };
 			bool mHasGlobalCooldown { false };
 			bool mShouldPursue { false };
+
+			mutable ObjectPtr mActiveAgent;
+			mutable ObjectPtr mActiveTarget;
+			mutable glm::vec3 mActiveCursorPosition { 0.f, 0.f, 0.f };
+			mutable int32_t mActiveRank { 1 };
+			mutable bool mCooldownPaidThisTick { false };
 
 			sol::function mActivateFn;
 			sol::function mDeactivateFn;

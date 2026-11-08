@@ -1,6 +1,7 @@
 
 // Include
 #include "lua.h"
+#include "lua51_transpiler.h"
 
 #include "instance.h"
 #include "objectmanager.h"
@@ -14,6 +15,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 
 #ifndef _MSC_VER
 #include <stdexcept>
@@ -1627,11 +1629,13 @@ namespace Game {
 
 	bool LuaThread::resume() {
 		if (!mCoroutine.valid()) {
+			lua_settop(lua_state(), 0);
 			return true;
 		}
 
 		if (mCoroutine.error()) {
-			return false;
+			lua_settop(lua_state(), 0);
+			return true;
 		}
 
 		sol::variadic_results results;
@@ -1647,9 +1651,16 @@ namespace Game {
 			std::cout << "LuaThread::resume()" << std::endl;
 			std::cout << err.what() << std::endl;
 			std::cout << std::to_underlying(mCoroutine.status()) << std::endl;
+			lua_settop(lua_state(), 0);
+			return true;
 		}
 
-		return mCoroutine.status() == sol::call_status::ok;
+		if (mCoroutine.status() != sol::call_status::yielded) {
+			lua_settop(lua_state(), 0);
+			return true;
+		}
+
+		return false;
 	}
 
 	void LuaThread::stop() {
@@ -1668,7 +1679,8 @@ namespace Game {
 	}
 
 	void LuaThread::post_call() {
-		if (mCoroutine.status() == sol::call_status::ok) {
+		if (mCoroutine.status() != sol::call_status::yielded) {
+			lua_settop(lua_state(), 0);
 			mLua.ReturnThreadToPool(this);
 		}
 	}
@@ -1682,8 +1694,32 @@ namespace Game {
 		mState.open_libraries();
 		sol::set_default_state(mState);
 
-		// set package path
-		LoadBuffer(R"(package.path = package.path .. ";./data/serverdata/lua/?.lua")");
+		// set package path and normalize require paths from Darkspore scripts
+		LoadBuffer(R"(
+package.path = package.path .. ";./data/serverdata/lua/?.lua;./data/serverdata/Abilities/?.lua;./data/serverdata/Modifiers/?.lua;./data/serverdata/behaviors/?.lua"
+do
+	local _raw_require = require
+	function require(modname)
+		if type(modname) == "string" then
+			local norm = modname:gsub("\\", "/")
+			norm = norm:gsub("^%.?/?data/serverdata/lua/", "")
+			norm = norm:gsub("^%.?/?serverdata/lua/", "")
+			norm = norm:gsub("^%.?/?data/serverdata/Abilities/", "")
+			norm = norm:gsub("^%.?/?serverdata/Abilities/", "")
+			norm = norm:gsub("^%.?/?data/serverdata/Modifiers/", "")
+			norm = norm:gsub("^%.?/?serverdata/Modifiers/", "")
+			norm = norm:gsub("^%.?/?data/serverdata/behaviors/", "")
+			norm = norm:gsub("^%.?/?serverdata/behaviors/", "")
+			norm = norm:gsub("%.lua$", "")
+			local ok, res = pcall(_raw_require, norm)
+			if ok then
+				return res
+			end
+		end
+		return _raw_require(modname)
+	end
+end
+)");
 
 		// Get default packages
 		sol::table packagesLoaded = mState["package"]["loaded"];
@@ -1824,13 +1860,57 @@ namespace Game {
 			return;
 		}
 
+		for (const auto& helperDir : { "data/serverdata/lua/", "data/serverdata/Modifiers/", "data/serverdata/behaviors/" }) {
+			if (!std::filesystem::exists(helperDir)) {
+				continue;
+			}
+			for (const auto& entry : std::filesystem::directory_iterator(helperDir)) {
+				if (entry.is_regular_file() && entry.path().extension() == ".lua") {
+					Lua51Transpiler::TranspileFile(entry.path(), entry.path());
+				}
+			}
+		}
+
 		std::cout << "Loading ability scripts...";
 
+		size_t loadedFiles = 0;
 		size_t failed = 0;
 		for (const auto& entry : std::filesystem::directory_iterator(dataPath)) {
 			const auto& path = entry.path();
 			if (entry.is_regular_file() && path.extension() == ".lua") {
+				const std::string stem = path.stem().string();
+				std::string sourceText;
+				{
+					std::ifstream in(path, std::ios::binary);
+					if (in) {
+						sourceText.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+					}
+				}
+
+				if (Lua51Transpiler::IsLua51Bytecode(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(sourceText.data()), sourceText.size()))) {
+					if (Lua51Transpiler::TranspileFile(path, path)) {
+						std::ifstream in(path, std::ios::binary);
+						if (in) {
+							sourceText.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+						}
+					}
+				}
+
 				auto result = mState.load_file(path.string());
+				if (!result.valid()) {
+					std::string repaired = Lua51Transpiler::GetKnownBrokenScriptRepair(stem, sourceText);
+					if (!repaired.empty()) {
+						{
+							std::ofstream out(path, std::ios::binary | std::ios::trunc);
+							if (out) {
+								out.write(repaired.data(), static_cast<std::streamsize>(repaired.size()));
+							}
+						}
+						sourceText = std::move(repaired);
+						result = mState.load_buffer(sourceText.data(), sourceText.size(), ("@" + path.string()).c_str());
+					}
+				}
+
 				if (!result.valid()) {
 					if (failed++ == 0) {
 						std::cout << std::endl;
@@ -1843,19 +1923,29 @@ namespace Game {
 					std::cout << err.what() << std::endl << std::endl;
 					continue;
 				}
-				
-				const auto& [it, inserted] = mLoadedAbilities.try_emplace(utils::hash_id(path.stem().string()));
-				if (inserted) {
-					sol::protected_function target = result.get<sol::protected_function>();
-					it->second = target.dump();
+
+				++loadedFiles;
+				sol::protected_function target = result.get<sol::protected_function>();
+				sol::bytecode dumped = target.dump();
+
+				mLoadedAbilities.try_emplace(utils::hash_id(stem), dumped);
+				if (stem.size() > 8 && (stem.starts_with("ability_") || stem.starts_with("Ability_"))) {
+					mLoadedAbilities.try_emplace(utils::hash_id(stem.substr(8)), dumped);
+				}
+				if (uint32_t hexId = Lua51Transpiler::ParseHexStemId(stem); hexId != 0) {
+					mLoadedAbilities.try_emplace(hexId, dumped);
+				}
+				for (const auto& regName : Lua51Transpiler::ExtractRegisteredAbilityNames(sourceText)) {
+					mLoadedAbilities.try_emplace(utils::hash_id(regName), dumped);
+					mLoadedAbilities.try_emplace(utils::hash_id("ability_" + regName), dumped);
 				}
 			}
 		}
 
-		if (mLoadedAbilities.empty() && failed > 0) {
+		if (loadedFiles == 0 && failed > 0) {
 			std::cout << " failed." << std::endl;
 		} else {
-			std::cout << " done. (loaded: " << mLoadedAbilities.size() << ", failed: " << failed << ")" << std::endl;
+			std::cout << " done. (loaded: " << loadedFiles << ", failed: " << failed << ")" << std::endl;
 		}
 	}
 
@@ -1920,6 +2010,7 @@ namespace Game {
 				return nullptr;
 			}
 
+			mLastRegisteredAbility = nullptr;
 			sol::protected_function_result pfr = mState.safe_script(abilityCode.as_string_view(), &sol::script_pass_on_error);
 			if (!pfr.valid()) {
 				sol::error err = pfr;
@@ -1927,11 +2018,22 @@ namespace Game {
 				return nullptr;
 			}
 
+			if (mLastRegisteredAbility) {
+				mLastRegisteredAbility->BindFunctions();
+			}
+
 			it = mAbilities.find(abilityId);
 			if (it == mAbilities.end()) {
-				std::cout << "Did you forget to call Ability.Register?" << std::endl;
-				return nullptr;
+				if (mLastRegisteredAbility) {
+					it = mAbilities.emplace(abilityId, mLastRegisteredAbility).first;
+				} else {
+					std::cout << "Did you forget to call Ability.Register?" << std::endl;
+					return nullptr;
+				}
 			}
+		}
+		if (it != mAbilities.end() && it->second) {
+			it->second->BindFunctions();
 		}
 		return it->second;
 	}
@@ -1981,13 +2083,25 @@ namespace Game {
 	}
 
 	void Lua::ReturnThreadToPool(LuaThread* thread) {
+		if (!thread) {
+			return;
+		}
+		if (thread->mOwnerObject && thread->mOwnerObject->GetLuaThread() == thread) {
+			thread->mOwnerObject->SetLuaThread(nullptr);
+		}
+		thread->mOwnerObject = nullptr;
+		thread->mResumeCondition = nullptr;
+		lua_settop(thread->lua_state(), 0);
+
 		constexpr size_t MAX_LUA_THREADS = 256;
 		if (mThreads.size() > MAX_LUA_THREADS) {
 			mThreads.erase(mThreads.find(thread->lua_state()));
 			delete thread;
 		} else {
 			thread->mValues.clear(); // Remove any stored values.
-			mThreadPool.push_back(thread);
+			if (std::find(mThreadPool.begin(), mThreadPool.end(), thread) == mThreadPool.end()) {
+				mThreadPool.push_back(thread);
+			}
 		}
 		// CollectGarbage();
 	}
@@ -2009,25 +2123,41 @@ namespace Game {
 	// Ability
 	Ability::Ability(Lua& lua, sol::table&& self, const std::string& name, uint32_t id) : Coroutine(lua, std::move(self)), mName(name), mId(id) {
 		mEnvironment["_ABILITY"] = this;
+		BindFunctions();
+	}
 
-		if (sol::optional<bool> hasActivate = mSelf["hasActivate"]; hasActivate.value_or(false)) {
-			if (sol::object value = mSelf["activate"]; value.is<sol::function>()) {
-				mEnvironment.set_on(value);
-				mActivateFn = value.as<sol::function>();
+	void Ability::BindFunctions() {
+		if (mSelf == sol::nil) {
+			return;
+		}
+
+		if (!mActivateFn) {
+			sol::optional<bool> hasActivate = mSelf["hasActivate"];
+			if (hasActivate.value_or(true)) {
+				if (sol::object value = mSelf["activate"]; value.is<sol::function>()) {
+					mEnvironment.set_on(value);
+					mActivateFn = value.as<sol::function>();
+				}
 			}
 		}
 
-		if (sol::optional<bool> hasDeactivate = mSelf["hasDeactivate"]; hasDeactivate.value_or(false)) {
-			if (sol::object value = mSelf["deactivate"]; value.is<sol::function>()) {
-				mEnvironment.set_on(value);
-				mDeactivateFn = value.as<sol::function>();
+		if (!mDeactivateFn) {
+			sol::optional<bool> hasDeactivate = mSelf["hasDeactivate"];
+			if (hasDeactivate.value_or(true)) {
+				if (sol::object value = mSelf["deactivate"]; value.is<sol::function>()) {
+					mEnvironment.set_on(value);
+					mDeactivateFn = value.as<sol::function>();
+				}
 			}
 		}
 
-		if (sol::optional<bool> hasTick = mSelf["hasTick"]; hasTick.value_or(false)) {
-			if (sol::object value = mSelf["tick"]; value.is<sol::function>()) {
-				mEnvironment.set_on(value);
-				mTickFn = value.as<sol::function>();
+		if (!mTickFn) {
+			sol::optional<bool> hasTick = mSelf["hasTick"];
+			if (hasTick.value_or(true)) {
+				if (sol::object value = mSelf["tick"]; value.is<sol::function>()) {
+					mEnvironment.set_on(value);
+					mTickFn = value.as<sol::function>();
+				}
 			}
 		}
 
@@ -2072,17 +2202,85 @@ namespace Game {
 		return mShouldPursue;
 	}
 
+	void Ability::PayCooldownAndMana() const {
+		mCooldownPaidThisTick = true;
+		if (!mActiveAgent) {
+			return;
+		}
+
+		float manaCost = GetManaCost(mActiveAgent, mActiveRank, 0.f);
+		if (manaCost > 0.f) {
+			mActiveAgent->SetMana(std::max(0.f, mActiveAgent->GetMana() - manaCost));
+		}
+
+		const auto& player = mLua.GetGame().GetPlayerByObject(mActiveAgent);
+		if (!player) {
+			return;
+		}
+
+		float cooldownSeconds = 0.f;
+		if (sol::object getDurationObj = mSelf["GetDuration"]; getDurationObj.is<sol::function>()) {
+			sol::protected_function fn = getDurationObj.as<sol::protected_function>();
+			sol::protected_function_result res = fn(mSelf, mActiveAgent->GetId(), mActiveRank);
+			if (res.valid() && res.get_type() == sol::type::number) {
+				cooldownSeconds = res.get<float>();
+			}
+		}
+		if (cooldownSeconds <= 0.f) {
+			sol::state_view state = mSelf.lua_state();
+			if (sol::object nAbObj = state["nAbility"]; nAbObj.is<sol::table>()) {
+				sol::table nAb = nAbObj.as<sol::table>();
+				if (sol::object getDurObj = nAb["GetDuration"]; getDurObj.is<sol::function>()) {
+					sol::protected_function fn = getDurObj.as<sol::protected_function>();
+					sol::protected_function_result res = fn(mSelf, mActiveAgent->GetId(), mActiveRank);
+					if (res.valid() && res.get_type() == sol::type::number) {
+						cooldownSeconds = res.get<float>();
+					}
+				}
+			}
+		}
+
+		if (cooldownSeconds > 0.f) {
+			if (const auto& attr = mActiveAgent->GetAttributeData()) {
+				const float cdr = std::clamp(attr->GetValue(AttributeType::Cooldown), 0.f, 0.85f);
+				cooldownSeconds *= (1.f - cdr);
+			}
+			const uint64_t durationMs = static_cast<uint64_t>(std::max(0.f, cooldownSeconds) * 1000.f);
+			if (durationMs > 0) {
+				const auto& [endMs, startMs] = player->AddCooldown(mId, durationMs);
+				mLua.GetGame().SendCooldownUpdate(mActiveAgent, mId, endMs - startMs, static_cast<uint32_t>(durationMs));
+			}
+		}
+	}
+
 	float Ability::GetManaCost(const ObjectPtr& object, int32_t rank, float value) const {
 		if (object && object->IsOverdriveCharged()) {
 			return 0.f;
 		}
 
-		sol::protected_function method = mSelf["GetManaCost"];
-		if (method != sol::nil) {
-			float cost = method.call<float>(mSelf, object, rank);
-			if (cost != 0.f) {
-				// TODO: figure out how "property" works in darkspore
-				return cost + (0.05f * value); // property[rank].something * value
+		if (sol::object methodObj = mSelf["GetManaCost"]; methodObj.is<sol::function>()) {
+			sol::protected_function method = methodObj.as<sol::protected_function>();
+			sol::protected_function_result res = method(mSelf, object ? object->GetId() : 0u, rank);
+			if (res.valid() && res.get_type() == sol::type::number) {
+				float cost = res.get<float>();
+				if (cost != 0.f) {
+					return cost + (0.05f * value);
+				}
+			}
+		} else {
+			sol::state_view state = mSelf.lua_state();
+			if (sol::object nAbObj = state["nAbility"]; nAbObj.is<sol::table>()) {
+				sol::table nAb = nAbObj.as<sol::table>();
+				if (sol::object fnObj = nAb["GetManaCost"]; fnObj.is<sol::function>()) {
+					sol::protected_function fn = fnObj.as<sol::protected_function>();
+					sol::protected_function_result res = fn(mSelf, object ? object->GetId() : 0u, rank);
+					if (res.valid() && res.get_type() == sol::type::number) {
+						float cost = res.get<float>();
+						if (cost != 0.f) {
+							return cost + (0.05f * value);
+						}
+					}
+				}
 			}
 		}
 
@@ -2154,8 +2352,17 @@ namespace Game {
 
 	bool Ability::Tick(ObjectPtr object, ObjectPtr target, glm::vec3 cursorPosition, int32_t rank) const {
 		if (!mTickFn) {
-			return false;
+			const_cast<Ability*>(this)->BindFunctions();
+			if (!mTickFn) {
+				return false;
+			}
 		}
+
+		mActiveAgent = object;
+		mActiveTarget = target;
+		mActiveCursorPosition = cursorPosition;
+		mActiveRank = rank;
+		mCooldownPaidThisTick = false;
 
 		LuaThread* thread;
 		if (object) {
@@ -2164,6 +2371,7 @@ namespace Game {
 				return false;
 			} else {
 				thread = mLua.SpawnThread();
+				thread->set_owner_object(object);
 				object->SetLuaThread(thread);
 			}
 		} else {
@@ -2171,6 +2379,9 @@ namespace Game {
 		}
 
 		thread->call<void>(mEnvironment, mTickFn, mSelf, object, target, cursorPosition, rank);
+		if (!mCooldownPaidThisTick && mSelf.get_or("cooldownType", 0) == 0) {
+			PayCooldownAndMana();
+		}
 		return true;
 	}
 
