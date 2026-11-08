@@ -41,6 +41,7 @@ class M0CompileContracts(unittest.TestCase):
         self.assertIn("RECAP_BUILD_GIT_SHA", CMAKE)
         self.assertIn("git rev-parse --short=12 HEAD", CMAKE)
         self.assertIn("RECAP_BUILD_GIT_SHA", MAIN)
+        self.assertIn("target_compile_options(recap_server PRIVATE /bigobj)", CMAKE)
 
 
 if __name__ == "__main__":

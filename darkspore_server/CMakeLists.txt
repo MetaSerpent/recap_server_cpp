@@ -47,7 +47,9 @@ set_target_properties(recap_server PROPERTIES
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH})
 
 if(MSVC)
-    target_compile_options(recap_server PRIVATE $<$<CONFIG:Debug>:/bigobj>)
+    # Lua bindings generate more than the normal COFF section limit in Release.
+    # /bigobj must apply to every MSVC configuration, not just Debug.
+    target_compile_options(recap_server PRIVATE /bigobj)
     set_target_properties(recap_server PROPERTIES LINK_FLAGS "/SUBSYSTEM:CONSOLE /INCREMENTAL:NO /Brepro")
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 endif()

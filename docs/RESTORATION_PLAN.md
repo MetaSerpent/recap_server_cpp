@@ -105,3 +105,8 @@ to distinguish builds. The SHA is `unknown` for source archives without Git
 metadata. The next gates are: successful Linux and Windows C++ CI builds,
 successful headless regression tests, and verified downloadable artifacts from
 the same commit. Follow-on real-client work is M1/M2, not proof of M0.
+
+Windows M0 compile follow-up: MSVC Release failed with C1128 (too many COFF
+sections in the expanded Lua bindings translation unit). Enable `/bigobj` in
+**all** MSVC configurations; it was previously set only for Debug. This change
+requires another Windows CI compilation before M0 is accepted.
