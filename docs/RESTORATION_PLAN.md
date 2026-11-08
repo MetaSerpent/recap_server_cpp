@@ -88,3 +88,20 @@ room/view/category maps own their objects: destructors must not call back into
 be initiated explicitly by the manager. Verify by rerunning the headless
 server with local ports, checking all exposed listeners, and stopping with
 SIGTERM; no game assets are necessary for this shutdown test.
+
+
+## M0: Build restoration after Lua pipeline integration (2026-11-08)
+
+The first Lua integration build on commit `475b4e4` failed on both Windows and
+Ubuntu. This M0 patch corrects the compiler-reported `string_view`/optional
+mismatches, invalid player/cooldown calls, sol2 table getter ambiguity, private
+loot API usage, nonexistent objective completion API, and incomplete Lua type
+usage. Cooldown operations now target the controlled Object, and Lua's
+completion callback uses the guarded BeamOut path. The gameplay behavior of
+these callbacks remains unverified with the retail client.
+
+The server prints `MetaSerpent <git SHA>` in `--version` and startup logs
+to distinguish builds. The SHA is `unknown` for source archives without Git
+metadata. The next gates are: successful Linux and Windows C++ CI builds,
+successful headless regression tests, and verified downloadable artifacts from
+the same commit. Follow-on real-client work is M1/M2, not proof of M0.

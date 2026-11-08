@@ -4,6 +4,10 @@
 #include "scheduler.h"
 #include "version.h"
 
+#ifndef RECAP_BUILD_GIT_SHA
+#define RECAP_BUILD_GIT_SHA "unknown"
+#endif
+
 #include "sporenet/instance.h"
 
 #include "http/uri.h"
@@ -51,7 +55,7 @@ Application& Application::InitApp(int argc, char* argv[]) {
                 sVerboseTimestamps = true;
             } else if (strcmp(argv[i], "--version") == 0 ||
                 strcmp(argv[i], "-v") == 0) {
-                std::cout << RECAP_VERSION_STRING << std::endl;
+                std::cout << RECAP_VERSION_STRING << " (MetaSerpent " << RECAP_BUILD_GIT_SHA << ")" << std::endl;
                 exit(0);
             } else if (strcmp(argv[i], "--darkspore-path") == 0) {
                 if (i + 1 >= argc) {
@@ -98,7 +102,8 @@ bool Application::OnInit() {
 	SetConsoleOutputCP(CP_UTF8);
 #endif
 
-	std::cout << "Starting recap server v" << RECAP_VERSION_STRING << std::endl;
+	std::cout << "Starting recap server v" << RECAP_VERSION_STRING
+		<< " (MetaSerpent " << RECAP_BUILD_GIT_SHA << ")" << std::endl;
 
 	// Loading Darkspore version and path
 	LoadDarksporeVersionAndPath();

@@ -17,6 +17,17 @@
 
 // Helpers
 namespace {
+	// Reading fields through sol::object avoids ambiguous get_or<T> overloads
+	// in sol2 3.3.1 and permits string or Lua-object table keys.
+	template <typename T, typename Key>
+	T LuaTableGetOr(const sol::table& table, const Key& key, T fallback) {
+		sol::object entry = table[key];
+		if (entry.valid() && entry != sol::nil && entry.is<T>()) {
+			return entry.as<T>();
+		}
+		return fallback;
+	}
+
 	auto& LuaGetGame(sol::this_state L) {
 		Game::Instance& game = sol::state_view(L)["Game"]["Instance"];
 		return game;
@@ -107,9 +118,9 @@ namespace {
 
 	auto LuaGetServerEvent(const Game::ObjectManager& objectManager, const sol::table& value) {
 		Game::ServerEvent serverEvent;
-		serverEvent.mServerEventDef = LuaExtractAssetOrGuid(value["asset"], value.get_or<uint32_t>("mServerEventDef", 0));
-		serverEvent.mObjectId = value.get_or<uint32_t>("objectId", value.get_or<uint32_t>("mObjectId", 0));
-		serverEvent.mSimpleSwarmEffectId = LuaExtractAssetOrGuid(value["simpleSwarmEffectId"], value.get_or<uint32_t>("mSimpleSwarmEffectId", 0));
+		serverEvent.mServerEventDef = LuaExtractAssetOrGuid(value["asset"], LuaTableGetOr<uint32_t>(value, "mServerEventDef", 0));
+		serverEvent.mObjectId = LuaTableGetOr<uint32_t>(value, "objectId", LuaTableGetOr<uint32_t>(value, "mObjectId", 0));
+		serverEvent.mSimpleSwarmEffectId = LuaExtractAssetOrGuid(value["simpleSwarmEffectId"], LuaTableGetOr<uint32_t>(value, "mSimpleSwarmEffectId", 0));
 
 		if (sol::object eventData = value["position"]; eventData.valid() && eventData != sol::nil) {
 			serverEvent.mPosition = LuaExtractVec3(eventData);
@@ -131,13 +142,13 @@ namespace {
 		if (object) {
 			serverEvent.mEffectIndex = object->AddEffect(serverEvent.mServerEventDef);
 			if (serverEvent.mEffectIndex != 0xFF) {
-				serverEvent.mSecondaryObjectId = value.get_or<uint32_t>("secondaryObjectId", value.get_or<uint32_t>("mSecondaryObjectId", 0));
-				serverEvent.mAttackerId = value.get_or<uint32_t>("attackerId", value.get_or<uint32_t>("mAttackerId", 0));
+				serverEvent.mSecondaryObjectId = LuaTableGetOr<uint32_t>(value, "secondaryObjectId", LuaTableGetOr<uint32_t>(value, "mSecondaryObjectId", 0));
+				serverEvent.mAttackerId = LuaTableGetOr<uint32_t>(value, "attackerId", LuaTableGetOr<uint32_t>(value, "mAttackerId", 0));
 
-				serverEvent.mRemove = value.get_or<bool>("remove", value.get_or<bool>("mRemove", false));
-				serverEvent.mHardStop = value.get_or<bool>("hardStop", value.get_or<bool>("mHardStop", false));
-				serverEvent.mForceAttach = value.get_or<bool>("forceAttach", value.get_or<bool>("mForceAttach", false));
-				serverEvent.mCritical = value.get_or<bool>("critical", value.get_or<bool>("mCritical", false));
+				serverEvent.mRemove = LuaTableGetOr<bool>(value, "remove", LuaTableGetOr<bool>(value, "mRemove", false));
+				serverEvent.mHardStop = LuaTableGetOr<bool>(value, "hardStop", LuaTableGetOr<bool>(value, "mHardStop", false));
+				serverEvent.mForceAttach = LuaTableGetOr<bool>(value, "forceAttach", LuaTableGetOr<bool>(value, "mForceAttach", false));
+				serverEvent.mCritical = LuaTableGetOr<bool>(value, "critical", LuaTableGetOr<bool>(value, "mCritical", false));
 			}
 		} else {
 			serverEvent.mObjectId = 0;
@@ -155,23 +166,23 @@ namespace {
 			parameters.mDirection = LuaExtractVec3(mDir);
 		}
 
-		parameters.mJinkInfo = value.get_or<uint32_t>("jinkInfo", value.get_or<uint32_t>("mJinkInfo", 0));
+		parameters.mJinkInfo = LuaTableGetOr<uint32_t>(value, "jinkInfo", LuaTableGetOr<uint32_t>(value, "mJinkInfo", 0));
 
-		parameters.mSpeed = value.get_or<float>("speed", value.get_or<float>("mSpeed", 0.f));
-		parameters.mAcceleration = value.get_or<float>("acceleration", value.get_or<float>("mAcceleration", 0.f));
-		parameters.mRange = value.get_or<float>("range", value.get_or<float>("mRange", 0.f));
-		parameters.mSpinRate = value.get_or<float>("spinRate", value.get_or<float>("mSpinRate", 0.f));
-		parameters.mHomingDelay = value.get_or<float>("homingDelay", value.get_or<float>("mHomingDelay", 0.f));
-		parameters.mTurnRate = value.get_or<float>("turnRate", value.get_or<float>("mTurnRate", 0.f));
-		parameters.mTurnAcceleration = value.get_or<float>("turnAcceleration", value.get_or<float>("mTurnAcceleration", 0.f));
-		parameters.mEccentricity = value.get_or<float>("eccentricity", value.get_or<float>("mEccentricity", 0.f));
-		parameters.mCombatantSweepHeight = value.get_or<float>("combatantSweepHeight", value.get_or<float>("mCombatantSweepHeight", 0.f));
+		parameters.mSpeed = LuaTableGetOr<float>(value, "speed", LuaTableGetOr<float>(value, "mSpeed", 0.f));
+		parameters.mAcceleration = LuaTableGetOr<float>(value, "acceleration", LuaTableGetOr<float>(value, "mAcceleration", 0.f));
+		parameters.mRange = LuaTableGetOr<float>(value, "range", LuaTableGetOr<float>(value, "mRange", 0.f));
+		parameters.mSpinRate = LuaTableGetOr<float>(value, "spinRate", LuaTableGetOr<float>(value, "mSpinRate", 0.f));
+		parameters.mHomingDelay = LuaTableGetOr<float>(value, "homingDelay", LuaTableGetOr<float>(value, "mHomingDelay", 0.f));
+		parameters.mTurnRate = LuaTableGetOr<float>(value, "turnRate", LuaTableGetOr<float>(value, "mTurnRate", 0.f));
+		parameters.mTurnAcceleration = LuaTableGetOr<float>(value, "turnAcceleration", LuaTableGetOr<float>(value, "mTurnAcceleration", 0.f));
+		parameters.mEccentricity = LuaTableGetOr<float>(value, "eccentricity", LuaTableGetOr<float>(value, "mEccentricity", 0.f));
+		parameters.mCombatantSweepHeight = LuaTableGetOr<float>(value, "combatantSweepHeight", LuaTableGetOr<float>(value, "mCombatantSweepHeight", 0.f));
 
-		parameters.mProjectileFlags = value.get_or<uint8_t>("projectileFlags", value.get_or<uint8_t>("mProjectileFlags", 0));
+		parameters.mProjectileFlags = LuaTableGetOr<uint8_t>(value, "projectileFlags", LuaTableGetOr<uint8_t>(value, "mProjectileFlags", 0));
 
-		parameters.mPiercing = value.get_or<bool>("piercing", value.get_or<bool>("mPiercing", false));
-		parameters.mIgnoreGroundCollide = value.get_or<bool>("ignoreGroundCollide", value.get_or<bool>("mIgnoreGroundCollide", false));
-		parameters.mIgnoreCreatureCollide = value.get_or<bool>("ignoreCreatureCollide", value.get_or<bool>("mIgnoreCreatureCollide", false));
+		parameters.mPiercing = LuaTableGetOr<bool>(value, "piercing", LuaTableGetOr<bool>(value, "mPiercing", false));
+		parameters.mIgnoreGroundCollide = LuaTableGetOr<bool>(value, "ignoreGroundCollide", LuaTableGetOr<bool>(value, "mIgnoreGroundCollide", false));
+		parameters.mIgnoreCreatureCollide = LuaTableGetOr<bool>(value, "ignoreCreatureCollide", LuaTableGetOr<bool>(value, "mIgnoreCreatureCollide", false));
 
 		return parameters;
 	}
@@ -2316,8 +2327,13 @@ namespace Game {
 			auto& manager = mGame.GetObjectManager();
 			auto loot = LuaGetObject(manager, lootVal);
 			auto character = LuaGetObject(manager, charVal);
-			if (loot && character) {
-				mGame.PickupLoot(loot, character);
+			if (loot && character && character->IsPlayerControlled()) {
+				const auto& player = character->GetPlayer();
+				if (player && player->GetDeployedCharacterObject() == character) {
+					// The public interaction entry point performs loot validation
+					// and delegates to the private, transactional pickup method.
+					mGame.InteractWithObject(player, loot->GetId());
+				}
 			}
 		};
 		gameObject["HasInteractableUsesLeft"] = [this](sol::object objVal) -> bool {
@@ -2554,8 +2570,15 @@ namespace Game {
 			nGameSim["IsChainGame"] = []() { return true; };
 			nGameSim["IsGameSidekicking"] = []() { return false; };
 			nGameSim["LevelComplete"] = [this](sol::optional<bool> victory) {
-				if (victory.value_or(true)) {
-					mGame.CompleteObjective(1);
+				if (!victory.value_or(true)) {
+					return;
+				}
+				// Use the existing guarded, idempotent completion pipeline.
+				// Client-side mission flow still requires real-game verification.
+				for (uint8_t index = 0; index < 4; ++index) {
+					if (auto player = mGame.GetPlayerByIndex(index)) {
+						mGame.BeamOut(player);
+					}
 				}
 			};
 			nGameSim["SendActionCancelMessage"] = [](sol::variadic_args) {};
@@ -3617,16 +3640,16 @@ namespace Game {
 		};
 		nAbility["SendAbilityEvent"] = [](sol::variadic_args) {};
 		nAbility["GetAbilityEventType"] = [](sol::object ev) -> uint32_t {
-			return ev.is<sol::table>() ? ev.as<sol::table>().get_or<uint32_t>("eventType", 0u) : 0u;
+			return ev.is<sol::table>() ? LuaTableGetOr<uint32_t>(ev.as<sol::table>(), "eventType", 0u) : 0u;
 		};
 		nAbility["GetAbilityEventIntData"] = [](sol::object ev, sol::object k) -> int32_t {
-			return ev.is<sol::table>() ? ev.as<sol::table>().get_or<int32_t>(k, 0) : 0;
+			return ev.is<sol::table>() ? LuaTableGetOr<int32_t>(ev.as<sol::table>(), k, 0) : 0;
 		};
 		nAbility["GetAbilityEventFloatData"] = [](sol::object ev, sol::object k) -> float {
-			return ev.is<sol::table>() ? ev.as<sol::table>().get_or<float>(k, 0.f) : 0.f;
+			return ev.is<sol::table>() ? LuaTableGetOr<float>(ev.as<sol::table>(), k, 0.f) : 0.f;
 		};
 		nAbility["GetAbilityEventGUIDData"] = [](sol::object ev, sol::object k) -> uint32_t {
-			return ev.is<sol::table>() ? ev.as<sol::table>().get_or<uint32_t>(k, 0u) : 0u;
+			return ev.is<sol::table>() ? LuaTableGetOr<uint32_t>(ev.as<sol::table>(), k, 0u) : 0u;
 		};
 	}
 

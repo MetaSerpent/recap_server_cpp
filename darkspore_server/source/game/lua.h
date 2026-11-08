@@ -57,8 +57,7 @@ namespace Game {
 					std::cout << "LuaThread::call()" << std::endl;
 					std::cout << err.what() << std::endl;
 					std::cout << std::to_underlying(mCoroutine.status()) << std::endl;
-					lua_settop(lua_state(), 0);
-					mLua.ReturnThreadToPool(this);
+					post_call();
 				}
 
 				if constexpr (!std::is_void_v<Result>) {

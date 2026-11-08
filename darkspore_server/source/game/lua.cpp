@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 
 #ifndef _MSC_VER
 #include <stdexcept>
@@ -1887,7 +1888,7 @@ end
 					}
 				}
 
-				if (Lua51Transpiler::IsLua51Bytecode(std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(sourceText.data()), sourceText.size()))) {
+				if (Lua51Transpiler::IsLua51Bytecode(sourceText)) {
 					if (Lua51Transpiler::TranspileFile(path, path)) {
 						std::ifstream in(path, std::ios::binary);
 						if (in) {
@@ -1898,15 +1899,15 @@ end
 
 				auto result = mState.load_file(path.string());
 				if (!result.valid()) {
-					std::string repaired = Lua51Transpiler::GetKnownBrokenScriptRepair(stem, sourceText);
-					if (!repaired.empty()) {
+					auto repaired = Lua51Transpiler::GetKnownBrokenScriptRepair(stem, sourceText);
+					if (repaired && !repaired->empty()) {
 						{
 							std::ofstream out(path, std::ios::binary | std::ios::trunc);
 							if (out) {
-								out.write(repaired.data(), static_cast<std::streamsize>(repaired.size()));
+								out.write(repaired->data(), static_cast<std::streamsize>(repaired->size()));
 							}
 						}
-						sourceText = std::move(repaired);
+						sourceText = std::move(*repaired);
 						result = mState.load_buffer(sourceText.data(), sourceText.size(), ("@" + path.string()).c_str());
 					}
 				}
@@ -1932,8 +1933,8 @@ end
 				if (stem.size() > 8 && (stem.starts_with("ability_") || stem.starts_with("Ability_"))) {
 					mLoadedAbilities.try_emplace(utils::hash_id(stem.substr(8)), dumped);
 				}
-				if (uint32_t hexId = Lua51Transpiler::ParseHexStemId(stem); hexId != 0) {
-					mLoadedAbilities.try_emplace(hexId, dumped);
+				if (auto hexId = Lua51Transpiler::ParseHexStemId(stem); hexId && *hexId != 0) {
+					mLoadedAbilities.try_emplace(*hexId, dumped);
 				}
 				for (const auto& regName : Lua51Transpiler::ExtractRegisteredAbilityNames(sourceText)) {
 					mLoadedAbilities.try_emplace(utils::hash_id(regName), dumped);
@@ -2213,7 +2214,7 @@ end
 			mActiveAgent->SetMana(std::max(0.f, mActiveAgent->GetMana() - manaCost));
 		}
 
-		const auto& player = mLua.GetGame().GetPlayerByObject(mActiveAgent);
+		const auto& player = mActiveAgent->GetPlayer();
 		if (!player) {
 			return;
 		}
@@ -2241,14 +2242,17 @@ end
 		}
 
 		if (cooldownSeconds > 0.f) {
+			// CooldownScale is a multiplier (1.0 means normal), not percentage CDR.
+			// Account for modified cooldowns while keeping wire durations in uint32.
 			if (const auto& attr = mActiveAgent->GetAttributeData()) {
-				const float cdr = std::clamp(attr->GetValue(AttributeType::Cooldown), 0.f, 0.85f);
-				cooldownSeconds *= (1.f - cdr);
+				cooldownSeconds *= std::clamp(attr->GetValue(AttributeType::CooldownScale), 0.f, 10.f);
 			}
-			const uint64_t durationMs = static_cast<uint64_t>(std::max(0.f, cooldownSeconds) * 1000.f);
+			const double milliseconds = std::max(0.0, static_cast<double>(cooldownSeconds) * 1000.0);
+			const uint32_t durationMs = static_cast<uint32_t>(
+				std::min(milliseconds, static_cast<double>(std::numeric_limits<uint32_t>::max())));
 			if (durationMs > 0) {
-				const auto& [endMs, startMs] = player->AddCooldown(mId, durationMs);
-				mLua.GetGame().SendCooldownUpdate(mActiveAgent, mId, endMs - startMs, static_cast<uint32_t>(durationMs));
+				const auto& [endMs, actualDuration] = mActiveAgent->AddCooldown(mId, durationMs);
+				mLua.GetGame().SendCooldownUpdate(mActiveAgent, mId, endMs - actualDuration, actualDuration);
 			}
 		}
 	}

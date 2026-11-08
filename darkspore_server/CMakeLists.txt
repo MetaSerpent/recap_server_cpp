@@ -26,6 +26,22 @@ add_definitions(-DSOL_STRINGS_ARE_NUMBERS=1 -DSOL_SAFE_FUNCTION=1 -DSOL_LUAJIT=1
 add_executable(recap_server ${RECAP_HEADERS} ${RECAP_SOURCES})
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${RECAP_HEADERS} ${RECAP_SOURCES})
 target_include_directories(recap_server PRIVATE source)
+
+# Include the exact Git revision in --version and startup logs. It remains
+# "unknown" when building from a source archive without Git metadata.
+set(RECAP_BUILD_GIT_SHA "unknown")
+execute_process(
+    COMMAND git rev-parse --short=12 HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/.."
+    OUTPUT_VARIABLE RECAP_GIT_REVISION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+    RESULT_VARIABLE RECAP_GIT_RESULT)
+if(RECAP_GIT_RESULT EQUAL 0 AND RECAP_GIT_REVISION MATCHES "^[0-9a-fA-F]+$")
+    set(RECAP_BUILD_GIT_SHA "${RECAP_GIT_REVISION}")
+endif()
+target_compile_definitions(recap_server PRIVATE
+    "RECAP_BUILD_GIT_SHA=\\\"${RECAP_BUILD_GIT_SHA}\\\"")
 set_target_properties(recap_server PROPERTIES
     SOVERSION ${PROJECT_VERSION_MAJOR}
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH})
