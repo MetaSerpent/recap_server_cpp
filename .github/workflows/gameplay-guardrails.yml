@@ -72,7 +72,7 @@ jobs:
           sudo apt-get install -y -qq luajit
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/lua51_transpiler_test.cpp -o /tmp/lua51_transpiler_test
           /tmp/lua51_transpiler_test tests/fixtures/lua51 /tmp/transpiler_fixture.lua
-          luajit tests/fixtures/lua51/run_fixture.lua /tmp/transpiler_fixture.lua > /tmp/transpiler_fixture.out
+          luajit tests/fixtures/lua51/run_fixture.lua /tmp/transpiler_fixture.lua /tmp/transpiler_fixture.out
           diff -u tests/fixtures/lua51/transpiler_fixture.expected /tmp/transpiler_fixture.out
       - name: Check squad-skill dispatch contract
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v

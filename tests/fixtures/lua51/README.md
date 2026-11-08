@@ -25,7 +25,7 @@ and `LUA_NUMBER_FMT "%.7g"` in `luaconf.h` (call it `lua51f`). Its
 ```sh
 lua51f compile_fixture.lua transpiler_fixture.lua transpiler_fixture.luac transpiler_fixture
 lua51f compile_fixture.lua close_fixture.lua close_fixture.luac close_fixture
-lua51f run_fixture.lua transpiler_fixture.luac > transpiler_fixture.expected
+lua51f run_fixture.lua transpiler_fixture.luac transpiler_fixture.expected
 ```
 
 Use only float32-exact numbers in fixtures so float32 Lua 5.1 and LuaJIT print

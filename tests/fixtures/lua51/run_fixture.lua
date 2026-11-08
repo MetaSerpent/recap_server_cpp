@@ -1,4 +1,7 @@
--- Runs a compiled or transpiled fixture chunk and prints its result.
--- Usage: luajit run_fixture.lua <chunk>   (or a float32 Lua 5.1 for bytecode)
+-- Runs a compiled or transpiled fixture chunk and writes its result.
+-- Usage: <lua> run_fixture.lua <chunk> <output>
+-- The output is opened in binary mode so it is byte-identical on every OS.
 local chunk = assert(loadfile(arg[1]))
-io.write(tostring(chunk()), "\n")
+local out = assert(io.open(arg[2], "wb"))
+out:write(tostring(chunk()), "\n")
+out:close()

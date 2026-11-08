@@ -96,9 +96,27 @@ bool Application::OnInit() {
 	setlocale(LC_ALL, "C");
 
 #ifdef _WIN32
-	AllocConsole();
-	(void)freopen("CONOUT$", "w", stdout);
-	(void)freopen("CONOUT$", "w", stderr);
+	// Keep stdout/stderr when they are redirected to a file or pipe, so a server
+	// log can be captured for diagnosis; otherwise make sure a console exists.
+	const auto isRedirected = [](DWORD stdHandle) {
+		const HANDLE handle = GetStdHandle(stdHandle);
+		if (handle == nullptr || handle == INVALID_HANDLE_VALUE) {
+			return false;
+		}
+		const DWORD type = GetFileType(handle);
+		return type == FILE_TYPE_DISK || type == FILE_TYPE_PIPE;
+	};
+	const bool stdoutRedirected = isRedirected(STD_OUTPUT_HANDLE);
+	const bool stderrRedirected = isRedirected(STD_ERROR_HANDLE);
+	if (!stdoutRedirected || !stderrRedirected) {
+		AllocConsole();
+	}
+	if (!stdoutRedirected) {
+		(void)freopen("CONOUT$", "w", stdout);
+	}
+	if (!stderrRedirected) {
+		(void)freopen("CONOUT$", "w", stderr);
+	}
 	SetConsoleOutputCP(CP_UTF8);
 #endif
 
