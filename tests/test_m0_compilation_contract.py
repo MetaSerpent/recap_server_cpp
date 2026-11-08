@@ -13,10 +13,14 @@ MAIN = (ROOT / "darkspore_server/source/main.cpp").read_text(encoding="utf-8")
 class M0CompileContracts(unittest.TestCase):
     def test_lua_transpiler_types_match(self):
         self.assertIn("IsLua51Bytecode(sourceText)", LUA)
-        self.assertIn("if (repaired && !repaired->empty())", LUA)
-        self.assertIn("sourceText = std::move(*repaired);", LUA)
         self.assertIn("hexId && *hexId != 0", LUA)
         self.assertNotIn("std::span<const uint8_t>", LUA)
+
+    def test_lua_loader_reports_unconvertible_scripts_without_patching_them(self):
+        # The loader must not overwrite a user's script with embedded content.
+        self.assertNotIn("GetKnownBrokenScriptRepair", LUA)
+        self.assertNotIn("repaired", LUA)
+        self.assertIn("regenerate the server Lua scripts from ServerData.package", LUA)
 
     def test_lua_uses_existing_game_api(self):
         self.assertNotIn("GetPlayerByObject", LUA)

@@ -14,10 +14,15 @@ bool Installer::running = false;
 std::string Installer::label = "";
 
 namespace {
+	// Every script is converted mechanically from the game's own Lua 5.1 bytecode.
+	// No script content is shipped with or patched by the server. unluac is only a
+	// fallback for chunks the transpiler refuses, and those are reported.
 	void TranspileServerDataDirectory(const std::filesystem::path& serverDataRoot, const std::filesystem::path& outputRoot, const std::string& unluac) {
 		if (!std::filesystem::exists(serverDataRoot)) {
 			return;
 		}
+		size_t transpiled = 0;
+		size_t decompiled = 0;
 		for (auto& entry : std::filesystem::recursive_directory_iterator(serverDataRoot)) {
 			if (!entry.is_regular_file() || entry.path().extension() != ".lua") {
 				continue;
@@ -26,25 +31,17 @@ namespace {
 			std::filesystem::path outputPath = outputRoot / relativePath;
 			std::filesystem::create_directories(outputPath.parent_path());
 
-			const std::string stem = entry.path().stem().string();
-			if (stem == "ability_citadel_boss_launch") {
-				std::ofstream out(outputPath, std::ios::binary | std::ios::trunc);
-				const auto clean = Game::Lua51Transpiler::GetCleanCitadelBossLaunchLua();
-				out.write(clean.data(), static_cast<std::streamsize>(clean.size()));
+			if (Game::Lua51Transpiler::TranspileFile(entry.path(), outputPath)) {
+				++transpiled;
 				continue;
 			}
-			if (stem == "template_ability_cone") {
-				std::ofstream out(outputPath, std::ios::binary | std::ios::trunc);
-				const auto clean = Game::Lua51Transpiler::GetCleanTemplateAbilityConeLua();
-				out.write(clean.data(), static_cast<std::streamsize>(clean.size()));
-				continue;
-			}
-
-			if (!Game::Lua51Transpiler::TranspileFile(entry.path(), outputPath)) {
-				std::string command = unluac + " \"" + entry.path().string() + "\" > \"" + outputPath.string() + "\"";
-				Installer::RunCommand(command);
-			}
+			std::cout << "Lua transpiler refused " << relativePath << "; falling back to unluac." << std::endl;
+			std::string command = unluac + " \"" + entry.path().string() + "\" > \"" + outputPath.string() + "\"";
+			Installer::RunCommand(command);
+			++decompiled;
 		}
+		std::cout << "Lua scripts converted from bytecode: " << transpiled
+		          << ", decompiled with unluac: " << decompiled << std::endl;
 	}
 }
 

@@ -30,8 +30,8 @@ Darkspore installation and launcher. Do not commit EA executable or assets.
 - Commit bounded (up to four) cash-out item awards with a random per-run receipt token, persisted with all parts and DNA in one account XML save. Receipt retries are idempotent and failed saves roll back without exposing phantom item cards. Reward counts, level progression, roll and rarity-band mathematics follow the recovered build-103 implementation; the rigblock ID fallback samples from the supported local ID range, but is provisional until original class/element tables are decoded. XP and daily bonuses are not awarded without source tuning.
 - Correct empty prefix/suffix asset hashes to zero (not the FNV hash of an empty string) and zero-initialize the entire 712-byte cash-out payload before writing fields; unused item/padding data must never contain uninitialized bytes.
 - Reset the old ObjectManager, Lua VM, markers, enemies and objective counters when an eligible player requests the next planet after completing a dungeon; accumulate per-player medal totals across planets and prevent duplicate completion tally. The server currently selects the next campaign level sequentially; actual vote-selection packets need verification. Refuse to reset while another player is in a live or uncommitted state. A new deployment from Spaceship after the previous chain is completed resets chain progression and medals instead of reusing the previous run. Full end-of-mission reward formulas and loot chances still need reconstruction.
-- Implement header-only `Lua51Transpiler` (`darkspore_server/source/game/lua51_transpiler.h`) to decompile/transpile raw PUC-Rio Lua 5.1 bytecode (`\x1bLua\x51`) into compatible LuaJIT bytecode/text, including automated bytecode-accurate repairs for syntax-broken decompilation artifacts (`ability_citadel_boss_launch.lua` line 109 and `template_ability_cone.lua` line 139).
-- Integrate automated transpilation and directory merging into `Installer::Run` (`installer.cpp`) for `Abilities`, `Modifiers`, and `behaviors`.
+- Implement header-only `Lua51Transpiler` (`darkspore_server/source/game/lua51_transpiler.h`), a one-to-one translation of Lua 5.1 bytecode (`\x1bLua\x51`, Darkspore's float32 variant) into LuaJIT source using flat locals and `goto`. It replaces unluac for every script, including the two whose unluac output fails to parse (`ability_citadel_boss_launch.lua`, `template_ability_cone.lua`). See "Lua asset pipeline verification" below for what was measured.
+- Integrate automated transpilation and directory merging into `Installer::LoadDarksporeData` (`installer.cpp`) for `lua`, `Abilities`, `Modifiers`, and `behaviors`.
 - Fix critical coroutine lifecycle bug in `LuaThread` (`lua.h` / `lua.cpp`): clear Lua coroutine stack with `lua_settop(L, 0)` on normal exit and errors, returning threads cleanly to `mThreadPool` instead of remaining dead/stuck in `mYieldedThreads`. Fix `Ability::Tick` and `nThread.Create` to check thread yield status so subsequent casts are not permanently blocked.
 - Wire active ability casting context (`mActiveAgent`, `mActiveTarget`, `mActiveCursorPosition`, `mActiveRank`, `PayCooldownAndMana`) into `Game::Ability` and ensure cooldown and mana are paid upon cast completion.
 - Reconstruct complete native engine script bindings in `luafunctions.cpp` across namespaces required by the 1,029 transpiled Darkspore scripts: `nBit`, `nMathUtil` (vector/arc/line math), `nUtil` (SPID, ToGUID, GetAsset hash resolution), `nGameObject` (position, facing, velocity, orientation, stats, targeting, animations, combat, damage, DNA pickup), `nObjectManager` (vector and coordinate object/trigger creation, spatial queries), `nThread` / `nThreadData` (coroutines, sleep, projectile tracing), `nAttribute`, `nEvent`, `nModifier`, `nPlayer`, `nPhysics`, `nGameSimulator`, and `nGameDirector`.
@@ -43,8 +43,8 @@ Darkspore installation and launcher. Do not commit EA executable or assets.
 | --- | --- | --- |
 | P0-A | Standalone C++ ability routing tests | Local test passed; CI added |
 | P0-B | Windows and Ubuntu server build | Upstream build workflows; MSVC 2022 verified |
-| P0-Lua | Ability & script asset loading (481 scripts) | Verified on live server: 481 loaded, 0 failed |
-| P0-C | Local login, hero selection, stage load | Login/account load verified; client crash at 0x006ec495 under investigation |
+| P0-Lua | Ability & script asset loading (481 scripts) | Transpiler verified offline against all 1,029 original scripts (see below); not yet loaded by a server build with this pipeline. The earlier "481 loaded, 0 failed" came from hand-repaired unluac output on the `f00045a` server, not from this pipeline |
+| P0-C | Local login, hero selection, stage load | Login/account load verified on `f00045a`; client crash at 0x006ec495 (null read at +8) on that build, not yet retested with the Lua pipeline |
 | P0-D | All three heroes cast correct unlocked abilities | Implemented & unit-tested; needs client trace |
 | P0-E | Finish encounter and complete stage | Implemented & unit-tested; needs client trace |
 | P1-A | Loot, XP and save/load persist after restart | Implemented & unit-tested; needs client verification |
@@ -110,3 +110,76 @@ Windows M0 compile follow-up: MSVC Release failed with C1128 (too many COFF
 sections in the expanded Lua bindings translation unit). Enable `/bigobj` in
 **all** MSVC configurations; it was previously set only for Debug. This change
 requires another Windows CI compilation before M0 is accepted.
+
+**M0 result:** accepted at `ba77786`. Windows, Ubuntu and guardrail CI passed;
+the Windows job ran the headless smoke test against the built binary, which
+reported `0.7.2 (MetaSerpent ba7778688577)`, and uploaded `recap-server-windows-x64`.
+
+## Lua asset pipeline verification (2026-11-09)
+
+**Findings on `ba77786`.** The transpiler was never run on real scripts before
+this entry. Measured against the 1,029 Lua 5.1 bytecode files in a local copy
+of the Steam demo's `ServerData.package` (build 5.3.0.103; analysis output kept
+outside the repository):
+
+- Every file has Darkspore's header (`int`/`size_t`/instruction = 4 bytes,
+  `lua_Number` = **float32**). Stock Lua cannot load them.
+- Multiple results were rebuilt with `{f()}` and `unpack(t)`, which drops
+  values after a `nil` (`return 1, nil, nil, 4` arrived as `1`). This affects
+  621 call sites in the corpus and changed observable behavior in real scripts.
+- `OP_CLOSE` was silently ignored. The corpus contains no `OP_CLOSE` (3,558
+  closures, 395 register captures, none detached), so this never fired on
+  build-103 data; the translation is still unsound for such input.
+- Reconstructed copies of `ability_citadel_boss_launch` and
+  `template_ability_cone` were embedded in the server source and written over
+  the user's scripts on load failure. Their constants match the originals,
+  but they are proprietary script content, which AGENTS.md forbids committing,
+  and the generic translation already handles both files.
+
+**Changes.** Multiple results and the 5.1 `arg` table now carry an explicit
+count (`__lua51_pack`/`__lua51_unpack`). Chunks with `OP_CLOSE` are refused
+(the installer falls back to unluac and logs it). The embedded scripts and the
+load-time overwrite are removed: the loader now reports the failure and asks
+for regeneration from `ServerData.package`. In-place conversion writes a
+temporary file and renames it, and source files are no longer rewritten on
+every start. The installer prints how many scripts were transpiled vs decompiled.
+
+**Verified (offline, not with the server or client):**
+
+- Unit/CI: `tests/lua51_transpiler_test.cpp` with redistributable fixtures in
+  `tests/fixtures/lua51` (independent code compiled with a float32 Lua 5.1.5
+  build that reproduces Darkspore's header). CI runs the transpiled fixture on
+  LuaJIT and requires output identical to the original bytecode on float32
+  Lua 5.1. The old transpiler fails it (8 of 21 lines differ). Truncated
+  input is rejected for every prefix length; `OP_CLOSE` input is refused.
+- Real corpus (local, needs the game files): all 1,029 scripts transpile and
+  parse with LuaJIT at the pinned commit `ea9eb7e`. A differential harness ran
+  each original bytecode file on float32 Lua 5.1.5 and its translation on
+  LuaJIT under identical recording stubs. It compared top-level execution,
+  every engine call with arguments, resulting globals, and a call of every
+  function the script defines (183,876 trace lines). **1,027/1,029 traces are
+  identical** (the old transpiler: 1,026). The two differences are VM
+  properties, not translation errors: LuaJIT's `math.rad` honors `__mul` on a
+  stub table (identical once `math.rad` behaves the same in both), and
+  float32 vs double rounding (`0.40938` vs `0.40937`).
+
+**Limitations.** The server runs scripts on LuaJIT, so numbers are doubles
+instead of the original float32, and `pairs()` order is VM-specific. Stubs
+cannot follow branches that depend on real engine values. Ability names are
+still found by scanning source text (`ExtractRegisteredAbilityNames`). The
+removed script copies remain in Git history (`475b4e4`..`ba77786`); removing
+them from history needs a rewrite and force-push, which is the maintainers'
+decision.
+
+**Regenerating an existing install** (MergeDirectories never overwrites, so
+old unluac output stays until removed): stop the game and server; back up
+`Server/data/serverdata/{lua,Abilities,Modifiers,behaviors}` outside `data/`;
+delete those four folders; start the server with `--darkspore-path`. Because
+`version_bin.txt` exists and `Modifiers` is missing, it re-extracts
+`ServerData.package` and logs `Lua scripts converted from bytecode: N,
+decompiled with unluac: M`. Expect `M = 0` for build 103.
+
+**Next failing gates:** load the regenerated scripts with a server built from
+this commit (expect 481 loaded / 0 failed in `Abilities`); then retest the
+client crash at `0x006ec495`, last seen on `f00045a` before any Lua change,
+and capture the server console log for the same session.

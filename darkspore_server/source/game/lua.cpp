@@ -1866,8 +1866,10 @@ end
 				continue;
 			}
 			for (const auto& entry : std::filesystem::directory_iterator(helperDir)) {
-				if (entry.is_regular_file() && entry.path().extension() == ".lua") {
-					Lua51Transpiler::TranspileFile(entry.path(), entry.path());
+				// Converts remaining Lua 5.1 bytecode in place; existing source is left untouched.
+				if (entry.is_regular_file() && entry.path().extension() == ".lua" &&
+				    !Lua51Transpiler::TranspileFile(entry.path(), entry.path())) {
+					std::cout << "GlobalLua: Could not convert Lua 5.1 bytecode " << entry.path() << " to source." << std::endl;
 				}
 			}
 		}
@@ -1899,29 +1901,22 @@ end
 
 				auto result = mState.load_file(path.string());
 				if (!result.valid()) {
-					auto repaired = Lua51Transpiler::GetKnownBrokenScriptRepair(stem, sourceText);
-					if (repaired && !repaired->empty()) {
-						{
-							std::ofstream out(path, std::ios::binary | std::ios::trunc);
-							if (out) {
-								out.write(repaired->data(), static_cast<std::streamsize>(repaired->size()));
-							}
-						}
-						sourceText = std::move(*repaired);
-						result = mState.load_buffer(sourceText.data(), sourceText.size(), ("@" + path.string()).c_str());
-					}
-				}
-
-				if (!result.valid()) {
 					if (failed++ == 0) {
 						std::cout << std::endl;
 					}
 
 					sol::error err = result;
-					std::string what = err.what();
-
 					std::cout << "GlobalLua: Could not load " << path << "." << std::endl;
-					std::cout << err.what() << std::endl << std::endl;
+					std::cout << err.what() << std::endl;
+					if (Lua51Transpiler::IsLua51Bytecode(sourceText)) {
+						std::cout << "The Lua 5.1 bytecode could not be converted to LuaJIT source." << std::endl << std::endl;
+					} else {
+						// The server never patches script source. Decompiler output (e.g. unluac)
+						// must be regenerated from the game's ServerData.package instead, see
+						// docs/RESTORATION_PLAN.md (Lua asset pipeline).
+						std::cout << "If this script came from an external decompiler such as unluac, "
+						             "regenerate the server Lua scripts from ServerData.package." << std::endl << std::endl;
+					}
 					continue;
 				}
 

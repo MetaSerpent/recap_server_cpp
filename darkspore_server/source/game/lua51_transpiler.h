@@ -404,15 +404,24 @@ namespace Game::Lua51Transpiler {
 			}
 
 			std::ostringstream oss;
+			if (is_top) {
+				// Multiple results (CALL C=0, VARARG B=0) may contain nil holes, so the
+				// table border '#' cannot recover their count. Keep it explicitly in 'n'.
+				oss << "local __lua51_select, __lua51_unpack = select, unpack\n";
+				oss << "local function __lua51_pack(...) return {n = __lua51_select(\"#\", ...), ...} end\n";
+			}
+			const std::string multi = "_v" + std::to_string(depth);
+			const std::string unpack_multi = "__lua51_unpack(" + multi + ", 1, " + multi + ".n)";
 			const uint32_t start_reg = is_top ? 0u : static_cast<uint32_t>(p.numparams);
 			const uint32_t end_reg = std::max<uint32_t>(p.maxstack, start_reg);
 			oss << indent << "local ";
 			for (uint32_t i = start_reg; i < end_reg; ++i) {
 				oss << reg(i) << ", ";
 			}
-			oss << "_v" << depth << "\n";
+			oss << multi << "\n";
 			if (!is_top && (p.is_vararg & 4u) != 0) {
-				oss << indent << reg(p.numparams) << " = {...}\n";
+				// Lua 5.1 VARARG_NEEDSARG: implicit 'arg' table including 'n'.
+				oss << indent << reg(p.numparams) << " = __lua51_pack(...)\n";
 			}
 
 			uint32_t top_base = 0;
@@ -557,7 +566,7 @@ namespace Game::Lua51Transpiler {
 							for (uint32_t i = A + 1; i < top_base; ++i) {
 								args << reg(i) << ", ";
 							}
-							args << "unpack(_v" << depth << ")";
+							args << unpack_multi;
 						} else {
 							for (uint32_t i = A + 1; i < A + B; ++i) {
 								if (i > A + 1) args << ", ";
@@ -565,7 +574,7 @@ namespace Game::Lua51Transpiler {
 							}
 						}
 						if (C == 0) {
-							oss << indent << "_v" << depth << " = {" << reg(A) << "(" << args.str() << ")}\n";
+							oss << indent << multi << " = __lua51_pack(" << reg(A) << "(" << args.str() << "))\n";
 							top_base = A;
 						} else if (C == 1) {
 							oss << indent << reg(A) << "(" << args.str() << ")\n";
@@ -585,7 +594,7 @@ namespace Game::Lua51Transpiler {
 							for (uint32_t i = A + 1; i < top_base; ++i) {
 								args << reg(i) << ", ";
 							}
-							args << "unpack(_v" << depth << ")";
+							args << unpack_multi;
 						} else {
 							for (uint32_t i = A + 1; i < A + B; ++i) {
 								if (i > A + 1) args << ", ";
@@ -601,7 +610,7 @@ namespace Game::Lua51Transpiler {
 							for (uint32_t i = A; i < top_base; ++i) {
 								oss << reg(i) << ", ";
 							}
-							oss << "unpack(_v" << depth << ") end\n";
+							oss << unpack_multi << " end\n";
 						} else if (B == 1) {
 							oss << indent << "do return end\n";
 						} else {
@@ -662,13 +671,17 @@ namespace Game::Lua51Transpiler {
 							for (uint32_t i = 1; i <= fixed_cnt; ++i) {
 								oss << indent << reg(A) << "[" << (base_idx + i) << "] = " << reg(A + i) << "\n";
 							}
-							oss << indent << "for _i = 1, #_v" << depth << " do " << reg(A)
-							    << "[" << (base_idx + fixed_cnt) << " + _i] = _v" << depth << "[_i] end\n";
+							oss << indent << "for _i = 1, " << multi << ".n do " << reg(A)
+							    << "[" << (base_idx + fixed_cnt) << " + _i] = " << multi << "[_i] end\n";
 						}
 						break;
 					}
 					case 35: // CLOSE
-						break;
+						// Lua 5.1 detaches captured registers here (e.g. a fresh upvalue per
+						// loop iteration). Registers are flat function-level locals in this
+						// translation, so the semantics cannot be reproduced: refuse instead
+						// of emitting code where every closure shares one variable.
+						return false;
 					case 36: { // CLOSURE
 						if (Bx >= p.protos.size()) return false;
 						const auto& child = p.protos[Bx];
@@ -709,7 +722,7 @@ namespace Game::Lua51Transpiler {
 					}
 					case 37: { // VARARG
 						if (B == 0) {
-							oss << indent << "_v" << depth << " = {...}\n";
+							oss << indent << multi << " = __lua51_pack(...)\n";
 							top_base = A;
 						} else {
 							oss << indent;
@@ -756,6 +769,10 @@ namespace Game::Lua51Transpiler {
 		return lua_source;
 	}
 
+	// Converts a Lua 5.1 bytecode file into LuaJIT-compatible source. inputPath may
+	// equal outputPath: the result goes to a temporary file that is renamed into
+	// place, so a failed write never truncates the original bytecode. Plain-text
+	// Lua is copied unchanged and is not rewritten when both paths are the same file.
 	inline bool TranspileFile(const std::filesystem::path& inputPath, const std::filesystem::path& outputPath) {
 		std::ifstream in(inputPath, std::ios::binary);
 		if (!in.is_open()) {
@@ -764,288 +781,45 @@ namespace Game::Lua51Transpiler {
 		std::string data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 		in.close();
 
-		std::filesystem::create_directories(outputPath.parent_path());
+		std::error_code ec;
+		std::string output;
 		if (IsLua51Bytecode(data)) {
 			auto transpiled = TranspileBytecode(data);
 			if (!transpiled.has_value()) {
 				return false;
 			}
-			std::ofstream out(outputPath, std::ios::binary | std::ios::trunc);
+			output = std::move(*transpiled);
+		} else {
+			if (std::filesystem::equivalent(inputPath, outputPath, ec)) {
+				return true;
+			}
+			output = std::move(data);
+		}
+
+		if (outputPath.has_parent_path()) {
+			std::filesystem::create_directories(outputPath.parent_path(), ec);
+		}
+		std::filesystem::path tempPath = outputPath;
+		tempPath += ".transpile.tmp";
+		{
+			std::ofstream out(tempPath, std::ios::binary | std::ios::trunc);
 			if (!out.is_open()) {
 				return false;
 			}
-			out.write(transpiled->data(), static_cast<std::streamsize>(transpiled->size()));
-			return out.good();
+			out.write(output.data(), static_cast<std::streamsize>(output.size()));
+			out.close();
+			if (!out) {
+				std::filesystem::remove(tempPath, ec);
+				return false;
+			}
 		}
-
-		// Plain-text Lua file: write directly
-		std::ofstream out(outputPath, std::ios::binary | std::ios::trunc);
-		if (!out.is_open()) {
+		std::filesystem::rename(tempPath, outputPath, ec);
+		if (ec) {
+			std::error_code ignored;
+			std::filesystem::remove(tempPath, ignored);
 			return false;
 		}
-		out.write(data.data(), static_cast<std::streamsize>(data.size()));
-		return out.good();
-	}
-
-	inline std::string_view GetCleanCitadelBossLaunchLua() {
-		static constexpr std::string_view kScript = R"lua(require("Abilities!ability_citadel_boss_missile.lua")
-require("Modifiers!modifier_citadel_boss_passive.lua")
-require("Lua!TargetUtils.lua")
-nAbility_Citadel_Boss_Launch = Class.newClass()
-nAbility_Citadel_Boss_Launch.namespace = "nAbility_Citadel_Boss_Launch"
-nAbility_Citadel_Boss_Launch.requiresAgent = true
-nAbility_Citadel_Boss_Launch.cooldown = {
-  30,
-  30,
-  30
-}
-nAbility_Citadel_Boss_Launch.manaCost = {
-  0,
-  0,
-  0
-}
-nAbility_Citadel_Boss_Launch.descriptors = nDescriptors.IsPhysicalDamage
-nAbility_Citadel_Boss_Launch.launchAnim = nAbility.PreloadAnimation("ctd_boss_tc_attack1_launch", "CitadelBossLaunch")
-nAbility_Citadel_Boss_Launch.landAnim = nAbility.PreloadAnimation("ctd_boss_tc_attack1_land", "CitadelBossLaunch")
-nAbility_Citadel_Boss_Launch.timeToInvulnerable = 1
-nAbility_Citadel_Boss_Launch.timeToInvisble = 2
-nAbility_Citadel_Boss_Launch.launchAnimTime = 1.433333
-nAbility_Citadel_Boss_Launch.landAnimTime = 1.083333
-nAbility_Citadel_Boss_Launch.landHitTime = 0.2
-nAbility_Citadel_Boss_Launch.missileDrops = 12
-nAbility_Citadel_Boss_Launch.timeBetweenDrops = 0.5
-nAbility_Citadel_Boss_Launch.dropAreaRadius = 12
-nAbility_Citadel_Boss_Launch.pauseAfterLastDrop = 2
-nAbility_Citadel_Boss_Launch.knockbackModifier = nUtil.ToGUID("0x0139de24")
-nAbility_Citadel_Boss_Launch.knockbackRadius = 1
-nAbility_Citadel_Boss_Launch.damage = {
-  {20, 30},
-  {30, 40},
-  {40, 50}
-}
-nAbility_Citadel_Boss_Launch.damageType = nDamageTypes.Technology
-nAbility_Citadel_Boss_Launch.damageSource = nDamageSources.Physical
-nAbility_Citadel_Boss_Launch.damageCoefficient = 0
-nAbility.RegisterAbility("CitadelBossLaunch", nAbility_Citadel_Boss_Launch)
-nAbility_Citadel_Boss_Launch[nAbilityFns.Tick] = function()
-  local self = nAbility_Citadel_Boss_Launch
-  local agentId = nAbility.GetAgentID()
-  local attrSnap = nAbility.GetAgentAttributeSnapshot()
-  nGameObject.SetAnimationState(agentId, self.launchAnim)
-  nThread.WaitForXSeconds(self.timeToInvulnerable)
-  local debuffs = nModifier.GetModifiersMatchingDescriptor(agentId, nDescriptors.IsDebuff)
-  for _, mod in ipairs(debuffs) do
-    nModifier.MarkForDelete(mod)
-  end
-  local passiveMod = nModifier.GetFirstModifierByGUID(agentId, nUtil.SPID("CitadelBossPassive"))
-  nAttribute.AddAttributeModifier(agentId, nAttributeType.Intangible, 1)
-  nPhysics.RemovePhysicsForObject(agentId)
-  nGameObject.SetNavCollision(agentId, false)
-  local turret = kObjIDNone
-  if passiveMod ~= kObjIDNone then
-    turret = nModifier.CallFunctionInContext(passiveMod, nModifier_Citadel_Boss_Passive.GetTurret)
-  end
-  if turret ~= kObjIDNone then
-    nPhysics.AddPhysicsForObject(turret)
-  end
-  local drops = 0
-  local posX, posY, posZ = nGameObject.GetPosition(agentId)
-  while drops < self.missileDrops do
-    nThread.WaitForXSeconds(self.timeBetweenDrops)
-    local dropX, dropY, dropZ = nil, nil, nil
-    local players = nPlayer.GetPlayerControlledObjects()
-    local target = players[math.random(5)]
-    if target == nil or not nGameObject.IsAlive(target) then
-      local angle = math.random(0, math.pi * 2)
-      local dist = math.random(0, self.dropAreaRadius)
-      dropX = posX + math.cos(angle) * dist
-      dropY = posY + math.sin(angle) * dist
-      dropZ = nLocomotion.GetTerrainHeight(dropX, dropY, posZ)
-    else
-      dropX, dropY, dropZ = nGameObject.GetPosition(target)
-    end
-    nAbility_Citadel_Boss_Missile.DropMissile(agentId, attrSnap, dropX, dropY, dropZ)
-    drops = drops + 1
-  end
-  nThread.WaitForXSeconds(self.pauseAfterLastDrop)
-  if passiveMod ~= kObjIDNone then
-    turret = nModifier.CallFunctionInContext(passiveMod, nModifier_Citadel_Boss_Passive.TurretCheck)
-    if turret ~= kObjIDNone then
-      nPhysics.RemovePhysicsForObject(turret)
-    end
-    coroutine.yield()
-    nModifier.CallFunctionInContext(passiveMod, nModifier_Citadel_Boss_Passive.TeleportNearArenaCenter)
-    coroutine.yield()
-  end
-  nGameObject.SetAnimationState(agentId, self.landAnim)
-  nThread.WaitForXSeconds(self.landHitTime)
-  local targets = nTargetUtils.GetTargetsAroundAttacker(agentId, self.knockbackRadius + nGameObject.GetFootprintRadius(agentId))
-  for _, target in ipairs(targets) do
-    if nGameObject.TakeDamage(attrSnap, target, nAbility.GetRankedValue(self.damage), self.damageType, self.damageSource, self.damageCoefficient, self.descriptors) then
-      nModifier.RequestModifier(target, agentId, self.knockbackModifier)
-    end
-  end
-  nPhysics.AddPhysicsForObject(agentId)
-  nGameObject.SetNavCollision(agentId, true)
-  nThread.WaitForXSeconds(self.landAnimTime - self.landHitTime)
-end
-)lua";
-		return kScript;
-	}
-
-	inline std::string_view GetCleanTemplateAbilityConeLua() {
-		static constexpr std::string_view kScript = R"lua(require("Lua!Vector.lua")
-nAbility_Cone_Template = Class.newClass()
-nAbility_Cone_Template.hasTick = true
-nAbility_Cone_Template.hasDeactivate = true
-nAbility_Cone_Template.requiresAgent = true
-nAbility_Cone_Template.descriptors = nDescriptors.IsEnergyDamage
-nAbility_Cone_Template.primaryAttributeStat = nAbilityPrimaryStat.Damage
-nAbility_Cone_Template.cooldownType = nCooldownType.Manual
-nAbility_Cone_Template.animationstate = kInvalidGUID
-nAbility_Cone_Template.timetohit = 0
-nAbility_Cone_Template.duration = 0
-nAbility_Cone_Template.fxEvent = kInvalidGUID
-nAbility_Cone_Template.hitEvent = kInvalidGUID
-nAbility_Cone_Template.modifiers = {}
-nAbility_Cone_Template.damageCreatureCount = -1
-nAbility_Cone_Template.damageRepeatInterval = {
-  0,
-  0,
-  0,
-  0,
-  0
-}
-nAbility_Cone_Template.damagedObjectTypes = nSporeLabs.damageableObjectTypes
-function nAbility_Cone_Template.TimeToHitAction(self)
-end
-function nAbility_Cone_Template.MakeHitArc(self)
-  local agentId = nAbility.GetAgentID()
-  local radius = GetRankedValueHelper(self.radius, nAbility.GetRank())
-  return nTargetUtils.MakeArc(agentId, radius, self.angle, true)
-end
-function nAbility_Cone_Template.DoDamage(self)
-  local agentId = nAbility.GetAgentID()
-  if nObjectManager.IsValidObject(agentId) then
-    local team = nGameObject.GetTeam(agentId)
-    local attrSnap = nAbility.GetAgentAttributeSnapshot()
-    local posX, posY, posZ = nGameObject.GetPosition(agentId)
-    local faceX, faceY, faceZ = nGameObject.GetFacing(agentId)
-    faceX, faceY, faceZ = nVector.normalize(faceX, faceY, faceZ)
-    local hitCount = 0
-    local radius = nAbility.GetRankedValue(self.radius)
-    if nBit.And(self.descriptors, nDescriptors.IsAoE) == nDescriptors.IsAoE then
-      radius = radius * (1 + nAttribute.GetAttributeValue(agentId, nAttributeType.AoERadius))
-    end
-    local objs = nObjectManager.GetObjectsInRadius(posX, posY, posZ, nAbility.GetRankedValue(self.radius), self.damagedObjectTypes)
-    local arc = self:MakeHitArc()
-    nAbility.DebugDrawDamageArc(nAbility.GetAbilityInstanceID(), arc)
-    for _, obj in pairs(objs) do
-      if obj ~= agentId and nGameObject.ValidateHostileTarget(team, obj) ~= false and (self.damageCreatureCount == -1 or hitCount < self.damageCreatureCount) then
-        local objX, objY, objZ = nGameObject.GetPosition(obj)
-        objX = objX - posX
-        objY = objY - posY
-        objZ = objZ - posZ
-        objX, objY, objZ = nVector.normalize(objX, objY, objZ)
-        local dot = nVector.dot(objX, objY, objZ, faceX, faceY, faceZ)
-        local inCone = false
-        if (dot > 0 and self.angle < 180) or self.angle >= 180 then
-          if math.rad(self.angle * 0.5) > math.acos(dot) then
-            inCone = true
-          end
-        end
-        if inCone then
-          local dmg = nAbility.GetRankedValue(self.damage)
-          local hit = true
-          if dmg[2] ~= 0 then
-            hit = nGameObject.TakeDamage(attrSnap, obj, nAbility.GetRankedValue(self.damage), self.damageType, self.damageSource, self.damageCoefficient, self.descriptors)
-          end
-          if hit then
-            if self.hitEffect ~= kInvalidGUID then
-              local ev = {
-                asset = self.hitEffect,
-                objectId = obj
-              }
-              nEvent.Notify(ev)
-            end
-            for _, mod in ipairs(self.modifiers) do
-              nModifier.RequestModifier(obj, agentId, mod, attrSnap, nAbility.GetRank())
-            end
-          end
-          hitCount = hitCount + 1
-        end
-      end
-    end
-  end
-end
-function nAbility_Cone_Template.tick(self)
-  local agentId = nAbility.GetAgentID()
-  local attrSnap = nAbility.GetAgentAttributeSnapshot()
-  local duration = nAbility.GetRankedValue(self.duration)
-  if nBit.And(self.descriptors, nDescriptors.IsAoE) == nDescriptors.IsAoE then
-    duration = duration * (1 + nAttribute.GetAttributeValue(agentId, nAttributeType.AoEDurationIncrease))
-  end
-  if self.animationstate ~= kInvalidGUID then
-    nGameObject.SetAnimationState(agentId, self.animationstate)
-    nThread.WaitUntilTime(self.timetohit, attrSnap)
-    nAbility.PayCooldownAndMana()
-    duration = duration - self.timetohit
-    self:TimeToHitAction()
-  end
-  if self.fxEvent ~= kInvalidGUID then
-    local posX, posY, posZ = nGameObject.GetPosition(agentId)
-    local faceX, faceY, faceZ = nGameObject.GetFacing(agentId)
-    faceX, faceY, faceZ = nVector.normalize(faceX, faceY, faceZ)
-    local ev = {
-      asset = self.fxEvent,
-      position = {
-        posX,
-        posY,
-        posZ
-      },
-      facing = {
-        faceX,
-        faceY,
-        faceZ
-      }
-    }
-    nEvent.Notify(ev)
-  end
-  local repeatInterval = nAbility.GetRankedValue(self.damageRepeatInterval)
-  repeat
-    self:DoDamage()
-    nThread.WaitForXSeconds(repeatInterval, attrSnap)
-    duration = duration - repeatInterval
-  until not (duration > repeatInterval and repeatInterval > 0 and nGameObject.IsAlive(agentId))
-  if nGameObject.IsAlive(agentId) then
-    nThread.WaitUntilTime(duration, attrSnap)
-  end
-end
-function nAbility_Cone_Template.deactivate(self)
-end
-)lua";
-		return kScript;
-	}
-
-	inline std::optional<std::string> GetKnownBrokenScriptRepair(std::string_view stem, std::string_view content) {
-		if (IsLua51Bytecode(content)) {
-			return TranspileBytecode(content);
-		}
-		if (stem == "ability_citadel_boss_launch") {
-			// Detect unluac syntax error or ad-hoc broken decompilation with unassigned L4_4/L5_5
-			if (content.find("for L7_7, L8_8 in L4_4(L5_5) do") != std::string_view::npos ||
-			    content.find("if L4_3 ~= L13_3 then") != std::string_view::npos) {
-				return std::string(GetCleanCitadelBossLaunchLua());
-			}
-		}
-		if (stem == "template_ability_cone") {
-			// Detect unluac syntax error or ad-hoc broken decompilation with infinite repeat loop
-			if (content.find("until not L5_41") != std::string_view::npos ||
-			    content.find("for L17_21, L18_22 in L14_18(L15_19) do") != std::string_view::npos) {
-				return std::string(GetCleanTemplateAbilityConeLua());
-			}
-		}
-		return std::nullopt;
+		return true;
 	}
 
 	inline std::optional<uint32_t> ParseHexStemId(std::string_view stem) {

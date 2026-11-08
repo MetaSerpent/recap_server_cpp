@@ -16,12 +16,38 @@ class LuaPipelineAndLifecycleContracts(unittest.TestCase):
         self.assertIn('"\\x1bLua"', TRANSPILER)
         self.assertIn("ver == 0x51", TRANSPILER)
 
-    def test_known_broken_script_repairs_present(self):
-        self.assertIn("GetKnownBrokenScriptRepair", TRANSPILER)
-        self.assertIn("ability_citadel_boss_launch", TRANSPILER)
-        self.assertIn("template_ability_cone", TRANSPILER)
-        self.assertIn("GetCleanCitadelBossLaunchLua()", TRANSPILER)
-        self.assertIn("GetCleanTemplateAbilityConeLua()", TRANSPILER)
+    def test_no_darkspore_script_content_is_embedded(self):
+        # Scripts are converted from the user's own ServerData.package. Reconstructed
+        # copies of proprietary scripts must not be shipped (see AGENTS.md).
+        for source in (TRANSPILER, INSTALLER, LUA_CPP):
+            self.assertNotIn('R"lua(', source)
+            self.assertNotIn("GetCleanCitadelBossLaunchLua", source)
+            self.assertNotIn("GetCleanTemplateAbilityConeLua", source)
+            self.assertNotIn("nAbility_Citadel_Boss_Launch", source)
+            self.assertNotIn("nAbility_Cone_Template", source)
+        self.assertNotIn('stem == "ability_citadel_boss_launch"', INSTALLER)
+        self.assertNotIn('stem == "template_ability_cone"', INSTALLER)
+
+    def test_multiple_results_keep_nil_holes(self):
+        # '{f()}' + 'unpack(t)' drops values after a nil; the count must be explicit.
+        self.assertIn('{n = __lua51_select(\\"#\\", ...), ...}', TRANSPILER)
+        self.assertIn('"__lua51_unpack(" + multi + ", 1, " + multi + ".n)"', TRANSPILER)
+        self.assertNotIn('"unpack(_v"', TRANSPILER)
+        self.assertNotIn('"for _i = 1, #_v"', TRANSPILER)
+
+    def test_upvalue_close_is_refused_not_ignored(self):
+        close_case = TRANSPILER[TRANSPILER.index("case 35: // CLOSE"):TRANSPILER.index("case 36: { // CLOSURE")]
+        self.assertIn("return false;", close_case)
+
+    def test_in_place_transpile_is_atomic(self):
+        transpile_file = TRANSPILER[TRANSPILER.index("inline bool TranspileFile("):]
+        self.assertIn('tempPath += ".transpile.tmp";', transpile_file)
+        self.assertIn("std::filesystem::rename(tempPath, outputPath, ec);", transpile_file)
+
+    def test_redistributable_fixture_is_executed_in_ci(self):
+        workflow = (ROOT.parents[1] / ".github/workflows/gameplay-guardrails.yml").read_text(encoding="utf-8")
+        self.assertIn("tests/lua51_transpiler_test.cpp", workflow)
+        self.assertIn("diff -u tests/fixtures/lua51/transpiler_fixture.expected", workflow)
 
     def test_coroutine_lifecycle_cleans_stack_and_recycles_threads(self):
         # Coroutine return values must not leave values on the sol2 thread stack
