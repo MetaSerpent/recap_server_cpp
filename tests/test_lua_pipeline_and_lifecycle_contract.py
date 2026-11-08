@@ -26,7 +26,8 @@ class LuaPipelineAndLifecycleContracts(unittest.TestCase):
     def test_coroutine_lifecycle_cleans_stack_and_recycles_threads(self):
         # Coroutine return values must not leave values on the sol2 thread stack
         self.assertIn("lua_settop(lua_state(), 0);", LUA_CPP)
-        self.assertIn("mLua.ReturnThreadToPool(this);", LUA_H)
+        self.assertIn("post_call();", LUA_H)
+        self.assertIn("mLua.ReturnThreadToPool(this);", LUA_CPP)
         self.assertIn("mCoroutine.status() != sol::call_status::yielded", LUA_CPP)
 
     def test_native_engine_namespaces_registered(self):
