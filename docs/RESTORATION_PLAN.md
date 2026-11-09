@@ -221,3 +221,19 @@ when executed; check whether any demo hero uses them).
 The Windows installer now runs its tools as `.\tool.exe`; bare names failed
 when `cmd.exe` does not search the current directory
 (`NoDefaultCurrentDirectoryInExePath`), which aborts the installer.
+
+### Client crash 0x006ec495 (build 103), static analysis
+
+From the exception report of the `f00045a` session (local only, not
+committed): `ACCESS_VIOLATION reading 0x00000008` at `0x006ec495`,
+`mov eax, [eax+8]` where `eax = [arg2+0x20] = NULL`. The function
+(`0x006ec480`) is a queued job callback invoked through a generic job runner
+(return address `0x007d0036`, `call eax` on a job record whose `+8` holds
+`0x006ec480`). It then walks 152-byte records at `+0x98/+0x9c` of the loaded
+object. The surrounding code (`0x6e9000`–`0x6ef000`) allocates under the
+`SP_Skinner` and `SP_Skinner/MeshAORender` tags: it is the client's creature
+skin-mesh builder. Working hypothesis (unverified): a creature/hero reached
+skinning without its model or rig data, e.g. because creature data sent by
+the server referenced parts or assets the client could not resolve. To
+confirm, reproduce with the server log captured and note the screen where it
+crashes (squad selection, editor, spaceship or level load).
