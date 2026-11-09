@@ -268,3 +268,27 @@ and session tokens. `Blaze::Log` now redacts `PASS`, `MAIL`, `TOKN`, `AUTH`,
 `tests/blaze_log_redaction_test.cpp`; the old code leaks all five secrets).
 `--timestamps` also enables per-packet QoS logging, which floods the log
 (~20k lines in minutes); run without it when collecting session logs.
+
+### Second real-client session on `0b3da19` (2026-11-09)
+
+Campaign data loaded (`ChainLevels: 72 campaign levels from game data`).
+The player chose 1-1 (`SelectedDifficulty = 1`, `zelems_1`): the level loaded
+on the server with no errors and the client got past the previous blocker
+(`GamePrepareForStart` → `GameStart`, `DirectorState`, `QuickGameMsgs`,
+`ObjectivesInitForLevel`, 346 `ObjectCreate`, then per-agent
+`CombatantDataUpdate`/`AttributeDataUpdate`/`AgentBlackboardUpdate`/
+`ObjectTeleport`). The client crashed before sending any action.
+
+Crash (local exception report, not committed): `ACCESS_VIOLATION reading
+0x00000034` at `0x009c8e75`, `cmp [esi+0x34], 0` with `esi = NULL`, in a
+function (`0x009c8e70`) of the client's asset catalog code (string refs
+`AssetCatalog/AssetGlobals`, `catalog_%d.bin`). The stack shows argument
+`0` and return address `0x0041fa02`, inside `0x0041f8a0`, which passes a
+resource id from `[obj+0xcc]` to a catalog lookup (`0x009eca10`) during HUD
+setup (neighbouring code: `HUD_ObjectivesPopup.swf`, `Helix_PIP.swf`,
+`HUD_PlayerDeck.swf`). Working hypothesis (unverified): a resource id sent
+by the server during world setup (objective, noun/creature, or HUD asset) is
+missing from the 5.3.0.103 client's catalog, e.g. data that only exists in
+5.3.0.127. Next: identify the object type behind `[obj+0xcc]` and diff the
+ids the server sends at mission start (objectives, nouns, creature parts)
+against the demo's own `AssetData_Binary`/`assets_catalog`.
