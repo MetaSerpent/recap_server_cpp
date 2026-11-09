@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!-- Synthetic fixture with the layout recap_parser emits for ChainLevels
+     assets. Level names are invented; no game data is included. -->
+<chainlevels>
+	<ChainLevel>
+		<entry>
+			<unk1>alpha_1.Level</unk1>
+			<unkInt>1</unkInt>
+			<unk2>intro_video</unk2>
+		</entry>
+		<entry>
+			<unk1>alpha_2.Level</unk1>
+			<unkInt>1</unkInt>
+		</entry>
+		<entry>
+			<unkInt>1</unkInt>
+		</entry>
+		<entry>
+			<unk1>beta_1</unk1>
+			<unkInt>1</unkInt>
+		</entry>
+		<entry>
+			<unk1>beta_2.Level</unk1>
+			<unkInt>1</unkInt>
+		</entry>
+		<unk4>outro_video</unk4>
+	</ChainLevel>
+	<unkFloat>150.00000</unkFloat>
+</chainlevels>

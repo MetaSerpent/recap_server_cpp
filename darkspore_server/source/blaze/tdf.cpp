@@ -7,6 +7,7 @@
 #include <rapidjson/prettywriter.h>
 
 #include <iostream>
+#include <string_view>
 
 #ifdef _MSC_VER
 #	define BSWAP16 _byteswap_ushort
@@ -20,12 +21,42 @@
 
 // Blaze
 namespace Blaze {
+	namespace {
+		// Labels whose string values are credentials, session secrets or personal
+		// data. Packet dumps must stay shareable for diagnosis (sanitized logs).
+		bool IsSensitiveLabel(std::string_view label) {
+			return label == "PASS" || label == "TOKN" || label == "AUTH" || label == "SKEY" ||
+			       label == "SESS" || label == "KEY" || label == "MAIL";
+		}
+
+		void RedactSensitive(rapidjson::Value& value) {
+			if (value.IsObject()) {
+				for (auto& member : value.GetObject()) {
+					const std::string_view label(member.name.GetString(), member.name.GetStringLength());
+					if (member.value.IsString() && IsSensitiveLabel(label)) {
+						member.value.SetString(rapidjson::StringRef("<redacted>"));
+					} else {
+						RedactSensitive(member.value);
+					}
+				}
+			} else if (value.IsArray()) {
+				for (auto& element : value.GetArray()) {
+					RedactSensitive(element);
+				}
+			}
+		}
+	}
+
 	void Log(const rapidjson::Document& document) {
+		rapidjson::Document redacted;
+		redacted.CopyFrom(document, redacted.GetAllocator());
+		RedactSensitive(redacted);
+
 		rapidjson::StringBuffer buffer;
 		buffer.Clear();
 
 		rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
-		document.Accept(writer);
+		redacted.Accept(writer);
 
 		std::string documentString = buffer.GetString();
 		std::cout << documentString << std::endl;

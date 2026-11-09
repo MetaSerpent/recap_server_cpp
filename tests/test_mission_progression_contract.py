@@ -19,4 +19,17 @@ class MissionProgressionContracts(unittest.TestCase):
         method = source.split("void ChainVoteData::SetLevelInstance(uint32_t index)", 1)[1].split(
             "uint32_t ChainVoteData::GetMarkerSet", 1
         )[0]
-        self.assertIn("if (index < levelNames.size())", method)
+        self.assertIn("if (index <= CampaignLevelCount())", method)
+
+    def test_campaign_order_comes_from_installed_chain_levels(self):
+        source = (ROOT / "raknet/types.cpp").read_text()
+        self.assertIn("Game::ChainLevels::Load(", source)
+        self.assertIn("levels[mLevelIndex - 1]", source)
+        by_index = source.split("void ChainVoteData::SetLevelByIndex(uint32_t index)", 1)[1].split(
+            "void ChainVoteData::SetLevelInstance", 1
+        )[0]
+        # An unsupported selection must be reported, not silently replaced by the tutorial.
+        self.assertIn("is outside the campaign", by_index)
+        self.assertIn("SelectTutorialLevel(", source)
+        instance = (ROOT / "game/instance.cpp").read_text()
+        self.assertIn("mChainData.GetFinalLevelIndex()", instance)

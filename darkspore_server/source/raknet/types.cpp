@@ -2,8 +2,13 @@
 // Include
 #include "types.h"
 #include "utils/functions.h"
+#include "game/mission_progression.h"
+#include "game/chain_levels.h"
 
+#include <filesystem>
+#include <iostream>
 #include <numbers>
+#include <system_error>
 
 // Campaign level order
 constexpr std::array<std::string_view, 25> levelNames {
@@ -46,6 +51,30 @@ constexpr std::array<std::string_view, 25> levelNames {
 	"scaldron_3",
 	"scaldron_4"
 };
+
+namespace {
+	// Campaign order from the installed game's ChainLevels data, loaded once on
+	// first use (games are only created after the installer has finished). The
+	// built-in levelNames table is the fallback when that data is missing.
+	const std::vector<std::string>& InstalledChainLevels() {
+		static const std::vector<std::string> levels = [] {
+			auto loaded = Game::ChainLevels::Load(std::filesystem::path(Game::ChainLevels::InstalledPath));
+			if (loaded.empty()) {
+				std::cout << "ChainLevels: '" << Game::ChainLevels::InstalledPath
+				          << "' not found; using the built-in 24-level campaign order." << std::endl;
+			} else {
+				std::cout << "ChainLevels: " << loaded.size() << " campaign levels from game data." << std::endl;
+			}
+			return loaded;
+		}();
+		return levels;
+	}
+
+	uint32_t CampaignLevelCount() {
+		const auto& levels = InstalledChainLevels();
+		return static_cast<uint32_t>(levels.empty() ? levelNames.size() - 1 : levels.size());
+	}
+}
 
 // RakNet
 namespace RakNet {
@@ -1091,7 +1120,23 @@ namespace RakNet {
 	}
 
 	std::string_view ChainVoteData::GetName() const {
+		if (mLevelIndex == 0) {
+			// Use the tutorial level the installed client build actually has.
+			const auto hasLevel = [](std::string_view level) {
+				std::error_code ec;
+				return std::filesystem::exists("data/serverdata/level/" + std::string(level) + ".level.xml", ec);
+			};
+			return Game::Progression::SelectTutorialLevel(
+				hasLevel(Game::Progression::TutorialLevelV2), hasLevel(Game::Progression::TutorialLevelV1));
+		}
+		if (const auto& levels = InstalledChainLevels(); !levels.empty()) {
+			return mLevelIndex <= levels.size() ? std::string_view(levels[mLevelIndex - 1]) : std::string_view{};
+		}
 		return mLevelIndex < levelNames.size() ? levelNames[mLevelIndex] : std::string_view{};
+	}
+
+	uint32_t ChainVoteData::GetFinalLevelIndex() const {
+		return CampaignLevelCount();
 	}
 
 	uint32_t ChainVoteData::GetLevel() const {
@@ -1117,14 +1162,17 @@ namespace RakNet {
 	}
 
 	void ChainVoteData::SetLevelByIndex(uint32_t index) {
-		if (index < levelNames.size()) {
+		if (index <= CampaignLevelCount()) {
 			mLevelIndex = index;
 			mLevel = utils::hash_id(GetName().data() + std::string(".Level"));
+		} else {
+			std::cout << "ChainVoteData: level index " << index << " is outside the campaign ("
+			          << CampaignLevelCount() << " levels); keeping index " << mLevelIndex << "." << std::endl;
 		}
 	}
 
 	void ChainVoteData::SetLevelInstance(uint32_t index) {
-		if (index < levelNames.size()) {
+		if (index <= CampaignLevelCount()) {
 			mLevelIndex = index;
 		}
 	}

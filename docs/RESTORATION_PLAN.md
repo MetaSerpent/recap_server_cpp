@@ -237,3 +237,34 @@ skinning without its model or rig data, e.g. because creature data sent by
 the server referenced parts or assets the client could not resolve. To
 confirm, reproduce with the server log captured and note the screen where it
 crashes (squad selection, editor, spaceship or level load).
+
+### First real-client session on `378acc3` (2026-11-09)
+
+Server run from a copy of the install, client started with
+`RecapLauncher.exe --no-server` (by default the launcher starts the old
+`Server/recap_server.exe`). Login, persona, rooms and game creation worked;
+the client connected to the RakNet game server and received
+`GamePrepareForStart`. The player selected campaign **7-1** and the loading
+screen never finished.
+
+Cause: the client sent `SelectedDifficulty = 25`. The built-in `levelNames`
+table (written for 5.3.0.127) covers only indices 0-24, so the bounds check in
+`SetLevelByIndex` silently kept index 0, the tutorial
+`Darkspore_Tutorial_cryos_1_v2`. That level does not exist in the 5.3.0.103
+demo (`Level: Could not find ...`), and its hash was sent to the client.
+
+Fix (implemented, unit-tested; needs the client rerun): campaign order now
+comes from the installed `chainlevels/ChainLevels.ChainLevels.xml`, which in
+the demo defines 72 levels (18 tiers × 4; index 25 = `cryos_1`; entries 21/22
+are `scaldron_2`/`scaldron_1`, swapped relative to the built-in table). The
+built-in table remains the fallback when the data is missing. The tutorial is
+`_v2` only if that level exists, otherwise `Darkspore_Tutorial_cryos_1`.
+Out-of-range selections are logged instead of falling back silently.
+Next-planet deployment uses the data's level count.
+
+Also from this session: Blaze packet dumps printed the login password, e-mail
+and session tokens. `Blaze::Log` now redacts `PASS`, `MAIL`, `TOKN`, `AUTH`,
+`SKEY`, `SESS` and `KEY` string values (tested by
+`tests/blaze_log_redaction_test.cpp`; the old code leaks all five secrets).
+`--timestamps` also enables per-packet QoS logging, which floods the log
+(~20k lines in minutes); run without it when collecting session logs.

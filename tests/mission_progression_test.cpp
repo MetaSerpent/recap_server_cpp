@@ -18,6 +18,13 @@ static_assert(!CanDeployNextPlanet(5, 23));
 static_assert(!CanDeployNextPlanet(1, 24));
 static_assert(!CanDeployNextPlanet(255, 0));
 
+// 5.3.0.103 demo data has only the v1 tutorial; 5.3.0.127 has v2. Prefer the
+// level that exists, keeping the upstream v2 name when both or neither exist.
+static_assert(SelectTutorialLevel(false, true) == "Darkspore_Tutorial_cryos_1");
+static_assert(SelectTutorialLevel(true, false) == "Darkspore_Tutorial_cryos_1_v2");
+static_assert(SelectTutorialLevel(true, true) == "Darkspore_Tutorial_cryos_1_v2");
+static_assert(SelectTutorialLevel(false, false) == "Darkspore_Tutorial_cryos_1_v2");
+
 int main() {
     for (std::uint8_t i = 0; i < 5; ++i) {
         assert(CompletePlanet(i) == i + 1);

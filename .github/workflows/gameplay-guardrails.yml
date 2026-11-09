@@ -76,5 +76,18 @@ jobs:
           diff -u tests/fixtures/lua51/transpiler_fixture.expected /tmp/transpiler_fixture.out
       - name: Resolve Darkspore Group!name.lua modules with the server require shim
         run: luajit tests/require_shim_test.lua
+      - name: Campaign level order from ChainLevels game data
+        run: |
+          git clone -q --depth 1 --branch v1.15 https://github.com/zeux/pugixml.git /tmp/pugixml
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic -I/tmp/pugixml/src tests/chain_levels_test.cpp /tmp/pugixml/src/pugixml.cpp -o /tmp/chain_levels_test
+          /tmp/chain_levels_test tests/fixtures/chainlevels
+      - name: Redact credentials from Blaze packet logs
+        run: |
+          git clone -q https://github.com/Tencent/rapidjson.git /tmp/rapidjson
+          git -C /tmp/rapidjson checkout -q ebd87cb468fb4cb060b37e579718c4a4125416c1
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic -DRAPIDJSON_HAS_STDSTRING -I/tmp/rapidjson/include -Idarkspore_server/source \
+            tests/blaze_log_redaction_test.cpp darkspore_server/source/blaze/tdf.cpp darkspore_server/source/databuffer.cpp \
+            -o /tmp/blaze_log_redaction_test
+          /tmp/blaze_log_redaction_test
       - name: Check squad-skill dispatch contract
         run: python3 -m unittest discover -s tests -p 'test_*.py' -v

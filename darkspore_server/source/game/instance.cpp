@@ -240,7 +240,7 @@ namespace Game {
 		// the real chain vote-selection protocol is reconstructed.
 		if (!mServer || !mChainData.IsCompleted() ||
 			(!startNewChain && !Progression::CanDeployNextPlanet(
-				mChainData.GetProgression(), mChainData.GetLevelIndex()))) {
+				mChainData.GetProgression(), mChainData.GetLevelIndex(), mChainData.GetFinalLevelIndex()))) {
 			return false;
 		}
 		uint64_t newNonce = mRunNonce;

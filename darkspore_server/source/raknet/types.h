@@ -764,6 +764,7 @@ namespace RakNet {
 			void SetProgression(uint8_t progression);
 
 			uint32_t GetLevelIndex() const;
+			uint32_t GetFinalLevelIndex() const;
 			void SetLevelByIndex(uint32_t index);
 			void SetLevelInstance(uint32_t index);
 
