@@ -183,3 +183,41 @@ decompiled with unluac: M`. Expect `M = 0` for build 103.
 this commit (expect 481 loaded / 0 failed in `Abilities`); then retest the
 client crash at `0x006ec495`, last seen on `f00045a` before any Lua change,
 and capture the server console log for the same session.
+
+### Server run on a copy of the install (2026-11-09, artifact `164cd1a`)
+
+Ran the CI artifact (`0.7.2 (MetaSerpent 164cd1a87723)`) from a copy of the
+demo's `Server` folder without the four script folders, with stdout
+redirected to a file (possible since `164cd1a`). Results:
+`Lua scripts converted from bytecode: 1029, decompiled with unluac: 0` and
+**`Loading ability scripts... done. (loaded: 481, failed: 0)`**. This gate is
+met for loading; it only proves the files parse.
+
+The same run exposed a pre-existing runtime blocker: `lua/global.lua` failed
+on `require("0x3681d755!GlobalDefinitions.lua")`. Game scripts name modules
+`Group!name.lua` (`Lua!` 222×, `Abilities!` 305×, `Modifiers!` 183×,
+`Modifers!` 3× (sic), `0x3681d755!` 6×, `Objectives!` 1×), and the server's
+`require` shim only stripped path prefixes, so every such `require` failed.
+The live install shows the same forms (only `global.lua` was hand-edited),
+so abilities requiring helpers such as `Lua!TargetUtils.lua` failed when
+first executed, independently of the transpiler. The shim now strips any
+`Group!` prefix, falls back to the hashed file name (`0x` + FNV-1 of the
+lower-case name, used for scripts absent from `reg_file.txt`, e.g.
+`AttributeUtils`, `NavigationUtils`, `modifier_shocked`), and no longer
+masks errors raised inside a module as "module not found". Base names are
+unique across the four folders. Tested by `tests/require_shim_test.lua`
+(runs the shim text from `lua.cpp` on LuaJIT; the old shim fails it).
+
+Of 122 distinct modules required by build-103 scripts, 9 do not exist in
+`ServerData.package` under either name and remain unresolvable, as they would
+be in the original engine: `template_ability_Firebomb`,
+`template_ability_ThornNova`, `modifier_soulravager_soulbag`,
+`fireravager_energyvulnerability`, `modifier_chain_ability_counter`,
+`modifier_energysentinel_attackDebuff`, `modifier_nomad_pets_pet_tracker`,
+`modifier_tcshieldedsentinel_support_snare`,
+`template_modifier_BinarySentinel_Knockback` (abilities requiring them fail
+when executed; check whether any demo hero uses them).
+
+The Windows installer now runs its tools as `.\tool.exe`; bare names failed
+when `cmd.exe` does not search the current directory
+(`NoDefaultCurrentDirectoryInExePath`), which aborts the installer.

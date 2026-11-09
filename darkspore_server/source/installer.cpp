@@ -54,8 +54,10 @@ void Installer::LoadDarksporeData(std::string darksporeInstallPath, std::string 
 			label = "Updating Lua scripts and Modifiers from ServerData.package...";
 			std::cout << "Updating Lua scripts and Modifiers from ServerData.package..." << std::endl;
 #ifdef _WIN32
-			std::string dbpf_unpacker = "dbpf_unpacker.exe";
-			std::string unluac = "unluac.exe";
+			// Explicit .\ so the tools resolve even when cmd.exe does not search the
+			// current directory (NoDefaultCurrentDirectoryInExePath).
+			std::string dbpf_unpacker = R"(.\dbpf_unpacker.exe)";
+			std::string unluac = R"(.\unluac.exe)";
 			RunCommand(dbpf_unpacker + " \"" + serverDataPkg.string() + "\" " + R"(ServerData\)");
 #else
 			std::string dbpf_unpacker = "./dbpf_unpacker";
@@ -78,9 +80,9 @@ void Installer::LoadDarksporeData(std::string darksporeInstallPath, std::string 
 	running = true;
 
 #ifdef _WIN32
-	std::string dbpf_unpacker = "dbpf_unpacker.exe";
-	std::string unluac        = "unluac.exe";
-	std::string recap_parser  = "recap_parser.exe";
+	std::string dbpf_unpacker = R"(.\dbpf_unpacker.exe)";
+	std::string unluac        = R"(.\unluac.exe)";
+	std::string recap_parser  = R"(.\recap_parser.exe)";
 
 	// Step 1: Unpack packages
 	std::cout << "Unpacking ServerData.package..." << std::endl;

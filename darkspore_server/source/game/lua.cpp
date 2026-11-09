@@ -1700,21 +1700,44 @@ namespace Game {
 package.path = package.path .. ";./data/serverdata/lua/?.lua;./data/serverdata/Abilities/?.lua;./data/serverdata/Modifiers/?.lua;./data/serverdata/behaviors/?.lua"
 do
 	local _raw_require = require
+	local bit = bit or _raw_require("bit")
+	-- Darkspore resource ids are the 32-bit FNV-1 hash of the lower-case name;
+	-- scripts missing from the name registry are extracted as "0xXXXXXXXX.lua".
+	local function resource_id(name)
+		local h = bit.tobit(0x811C9DC5)
+		for i = 1, #name do
+			h = bit.tobit(bit.lshift(h, 24) + h * 0x193) -- h * 0x01000193 mod 2^32
+			h = bit.bxor(h, name:byte(i))
+		end
+		return "0x" .. bit.tohex(h):upper()
+	end
+	local function is_available(name)
+		return package.loaded[name] ~= nil or package.searchpath(name, package.path) ~= nil
+	end
+	-- Darkspore scripts name modules as "Group!name.lua" (Lua!, Abilities!,
+	-- Modifiers!, the Modifers! typo, 0x3681d755!, ...). Groups map to folders on
+	-- package.path and file names are unique across them.
+	local function resolve(modname)
+		local name = modname:gsub("\\", "/")
+		name = name:gsub("^[%w_]*!", "")
+		name = name:gsub("^%.?/?data/serverdata/[%w_]+/", "")
+		name = name:gsub("^%.?/?serverdata/[%w_]+/", "")
+		name = name:gsub("%.lua$", "")
+		if is_available(name) then
+			return name
+		end
+		local hashed = resource_id(name:lower())
+		if is_available(hashed) then
+			return hashed
+		end
+		return nil
+	end
 	function require(modname)
 		if type(modname) == "string" then
-			local norm = modname:gsub("\\", "/")
-			norm = norm:gsub("^%.?/?data/serverdata/lua/", "")
-			norm = norm:gsub("^%.?/?serverdata/lua/", "")
-			norm = norm:gsub("^%.?/?data/serverdata/Abilities/", "")
-			norm = norm:gsub("^%.?/?serverdata/Abilities/", "")
-			norm = norm:gsub("^%.?/?data/serverdata/Modifiers/", "")
-			norm = norm:gsub("^%.?/?serverdata/Modifiers/", "")
-			norm = norm:gsub("^%.?/?data/serverdata/behaviors/", "")
-			norm = norm:gsub("^%.?/?serverdata/behaviors/", "")
-			norm = norm:gsub("%.lua$", "")
-			local ok, res = pcall(_raw_require, norm)
-			if ok then
-				return res
+			local name = resolve(modname)
+			if name then
+				-- Not wrapped in pcall: errors raised by the module itself must surface.
+				return _raw_require(name)
 			end
 		end
 		return _raw_require(modname)
