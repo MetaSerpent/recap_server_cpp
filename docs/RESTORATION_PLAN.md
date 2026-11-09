@@ -292,3 +292,22 @@ missing from the 5.3.0.103 client's catalog, e.g. data that only exists in
 5.3.0.127. Next: identify the object type behind `[obj+0xcc]` and diff the
 ids the server sends at mission start (objectives, nouns, creature parts)
 against the demo's own `AssetData_Binary`/`assets_catalog`.
+
+### "Undefined" heroes and the HUD crash: squads held template ids
+
+The player reported that the mission loading screen showed the enemies but
+three blank hero slots named "undefined". The account's squads contained
+`[1614078369, 0, 0]`, `[2530835539, 0, 0]`, `[3618328019, 0, 0]`: the
+creature *template* ids of Arborus Gamma, Zrin Beta and Vex Alpha, while the
+owned creatures have ids 1..N. Registration (upstream `c73300b`/`101954f`)
+called `SetCreatureId(0, templates[slot]->GetNoun())`, so `Player::SetSquad`
+found no creature and sent noun 0. This matches the client crash in the
+asset catalog during HUD setup (a lookup of an asset the hero does not have).
+
+Fix (implemented, unit-tested; needs the client rerun): registration assigns
+the ids returned by `UnlockCreature`, three creatures per squad;
+`User::Load` repairs squads stored in the old layout (template noun in slot
+0, other slots empty → default 3-creature squad; other template nouns map to
+an owned creature of that template); `Player::SetSquad` logs squad members
+the account does not own. Logic in `sporenet/squad_repair.h`, tested by
+`tests/squad_repair_test.cpp`.

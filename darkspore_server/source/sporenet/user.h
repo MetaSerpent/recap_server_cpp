@@ -162,6 +162,11 @@ namespace SporeNet {
 			SquadPtr GetSquadById(uint32_t id) const;
 
 			void ResetSquads();
+			// Fills each squad with three owned creatures (new accounts).
+			void AssignDefaultSquads();
+			// Replaces creature template ids stored by older registration code with
+			// owned creature ids. Returns true if any squad changed.
+			bool RepairSquads();
 
 			bool UpdateSquad(uint32_t slot, const std::string& creatureStringList, bool pvp);
 

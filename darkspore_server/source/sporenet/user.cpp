@@ -2,6 +2,7 @@
 // Include
 #include "user.h"
 #include "squad_selection.h"
+#include "squad_repair.h"
 #include "account_filename.h"
 #include "instance.h"
 
@@ -12,6 +13,8 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <iostream>
+#include <vector>
 #include <openssl/rand.h>
 
 /*
@@ -266,6 +269,58 @@ namespace SporeNet {
 		squad3->Reset(3);
 	}
 
+	namespace {
+		void CollectOwnedCreatures(const Creatures& creatures, std::vector<SquadRepair::OwnedCreature>& owned,
+		                           std::vector<uint32_t>& unlockOrder) {
+			for (const auto& creature : creatures) {
+				if (creature && creature->GetId() != 0) {
+					owned.push_back({ creature->GetId(), creature->GetNoun() });
+					unlockOrder.push_back(creature->GetId());
+				}
+			}
+			// Creature ids are assigned sequentially on unlock.
+			std::sort(unlockOrder.begin(), unlockOrder.end());
+		}
+	}
+
+	void User::AssignDefaultSquads() {
+		std::vector<SquadRepair::OwnedCreature> owned;
+		std::vector<uint32_t> unlockOrder;
+		CollectOwnedCreatures(mCreatures, owned, unlockOrder);
+		for (size_t index = 0; index < mSquads.size(); ++index) {
+			if (const auto& squad = mSquads[index]) {
+				const auto ids = SquadRepair::DefaultSquad(index, unlockOrder);
+				for (uint8_t slot = 0; slot < ids.size(); ++slot) {
+					squad->SetCreatureId(slot, ids[slot]);
+				}
+			}
+		}
+	}
+
+	bool User::RepairSquads() {
+		std::vector<SquadRepair::OwnedCreature> owned;
+		std::vector<uint32_t> unlockOrder;
+		CollectOwnedCreatures(mCreatures, owned, unlockOrder);
+		bool changed = false;
+		for (size_t index = 0; index < mSquads.size(); ++index) {
+			const auto& squad = mSquads[index];
+			if (!squad) {
+				continue;
+			}
+			auto ids = squad->GetCreatureIds();
+			if (SquadRepair::Repair(ids, index, owned, unlockOrder)) {
+				// Set slot by slot so the squad keeps its PvE/PvP category.
+				for (uint8_t slot = 0; slot < ids.size(); ++slot) {
+					squad->SetCreatureId(slot, ids[slot]);
+				}
+				std::cout << "User: repaired squad " << squad->GetId()
+				          << " (creature template ids replaced by owned creature ids)." << std::endl;
+				changed = true;
+			}
+		}
+		return changed;
+	}
+
 	bool User::UpdateSquad(uint32_t slot, const std::string& creatureStringList, bool pvp) {
 		auto squad = GetSquadById(slot);
 		if (!squad || squad->IsLocked()) {
@@ -469,6 +524,10 @@ namespace SporeNet {
 					}
 				}
 			}
+
+			// Accounts registered by older builds stored template ids in squads.
+			// The repaired squads are written on the next save.
+			RepairSquads();
 
 			mFeed.Read(docUser);
 			mParts.Read(docUser);

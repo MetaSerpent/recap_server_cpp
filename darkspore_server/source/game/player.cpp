@@ -11,6 +11,7 @@
 #include "utils/functions.h"
 
 #include "raknet/types.h"
+#include <iostream>
 
 // Game
 namespace Game {
@@ -280,6 +281,10 @@ namespace Game {
 				character.SetMana(character.GetMaxMana());
 
 				const auto& creature = mUser->GetCreatureById(creatureId);
+				if (!creature && creatureId != 0) {
+					std::cout << "Player: squad " << mSquad->GetId() << " references creature " << creatureId
+					          << " that the account does not own; the hero slot will be empty." << std::endl;
+				}
 				if (creature) {
 					character.SetNoun(creature->GetNoun());
 					character.SetVersion(creature->GetVersion());

@@ -803,13 +803,10 @@ namespace Game {
 			account.grantAllAccess = true;
 			account.grantOnlineAccess = true;
 
+			// Squads hold ids of creatures the account owns (from UnlockCreature),
+			// not template nouns; otherwise heroes resolve to nothing in missions.
 			user->ResetSquads();
-			auto squads = user->get_squads();
-			for (size_t slot = 0; slot < 3 && slot < templates.size() && slot < squads.size(); ++slot) {
-				if (templates[slot] && squads[slot]) {
-					squads[slot]->SetCreatureId(0, templates[slot]->GetNoun());
-				}
-			}
+			user->AssignDefaultSquads();
 
 			if (!user->Save()) {
 				throw std::runtime_error("Failed to persist registered player data");

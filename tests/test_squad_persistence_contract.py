@@ -30,5 +30,18 @@ class SquadPersistenceContracts(unittest.TestCase):
         self.assertIn("add_common_keys(docResponse, success);", block)
 
 
+
+
+class SquadOwnershipContracts(unittest.TestCase):
+    def test_registration_assigns_owned_creatures_not_templates(self):
+        api = (Path(__file__).resolve().parents[1] / "darkspore_server/source/game/api.cpp").read_text(encoding="utf-8")
+        self.assertNotIn("SetCreatureId(0, templates[slot]->GetNoun())", api)
+        self.assertIn("user->AssignDefaultSquads();", api)
+
+    def test_existing_accounts_are_repaired_on_load(self):
+        user = (Path(__file__).resolve().parents[1] / "darkspore_server/source/sporenet/user.cpp").read_text(encoding="utf-8")
+        load = user.split("bool User::Load()", 1)[1].split("bool User::Save()", 1)[0]
+        self.assertIn("RepairSquads();", load)
+
 if __name__ == "__main__":
     unittest.main()

@@ -76,6 +76,10 @@ jobs:
           diff -u tests/fixtures/lua51/transpiler_fixture.expected /tmp/transpiler_fixture.out
       - name: Resolve Darkspore Group!name.lua modules with the server require shim
         run: luajit tests/require_shim_test.lua
+      - name: Squads reference owned creatures, not templates
+        run: |
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/squad_repair_test.cpp -o /tmp/squad_repair_test
+          /tmp/squad_repair_test
       - name: Campaign level order from ChainLevels game data
         run: |
           git clone -q --depth 1 --branch v1.15 https://github.com/zeux/pugixml.git /tmp/pugixml
