@@ -92,6 +92,10 @@ jobs:
           # with SOL_SAFE_FUNCTION_CALLS, the same defines as darkspore_server/CMakeLists.txt.
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic -O2 -DNDEBUG -DSOL_STRINGS_ARE_NUMBERS=1 -DSOL_SAFE_FUNCTION_CALLS=1 -DSOL_SAFE_USERTYPE=1 -DSOL_LUAJIT=1 -DSOL_EXCEPTIONS_SAFE_PROPAGATION=1             -isystem /tmp/sol2/include -isystem /tmp/luajit/src tests/lua_type_filter_test.cpp /tmp/luajit/src/libluajit.a -ldl -lm             -o /tmp/lua_type_filter_test
           /tmp/lua_type_filter_test
+      - name: Animation sequence cursor and attribute modifier handles
+        run: |
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/combat_presentation_test.cpp -o /tmp/combat_presentation_test
+          /tmp/combat_presentation_test
       - name: Squads reference owned creatures, not templates
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/squad_repair_test.cpp -o /tmp/squad_repair_test

@@ -160,7 +160,10 @@ namespace Game {
 	void CombatEvent::WriteReflection(RakNet::BitStream& stream) const {
 		RakNet::reflection_serializer<8> reflector(stream);
 		reflector.begin();
-		reflector.write<0>(mFlags);
+		// Build 103 reflects the flags as 16 bits; writing the 32-bit enum shifted
+		// every following field (delta, target, source) by two bytes.
+		// Source: darkspin server/raknet/application.go, CombatEventMessage.
+		reflector.write<0>(static_cast<uint16_t>(static_cast<uint32_t>(mFlags) & 0xFFFFu));
 		reflector.write<1>(mDeltaHealth);
 		reflector.write<2>(mAbsorbedAmount);
 		reflector.write<3>(mTargetId);

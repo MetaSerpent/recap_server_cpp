@@ -4,6 +4,7 @@
 
 // Include
 #include "attributes.h"
+#include "attribute_modifier_registry.h"
 
 #include <glm/glm.hpp>
 
@@ -227,6 +228,7 @@ namespace Game {
 			std::unordered_map<uint32_t, AbilityPtr> mAbilities;
 			AbilityPtr mLastRegisteredAbility;
 			std::unordered_map<uint32_t, sol::table> mPrivateTables;
+			AttributeModifierRegistry mAttributeModifiers;
 
 			std::unordered_set<LuaThread*> mYieldedThreads;
 
@@ -288,6 +290,11 @@ namespace Game {
 			const glm::vec3& GetActiveCursorPosition() const { return mActiveCursorPosition; }
 			int32_t GetActiveRank() const { return mActiveRank; }
 
+			// Zero-based entry of animationSequence used by the current cast
+			// (see game/animation_sequence.h) and its animation state id.
+			uint32_t GetActiveSequenceIndex() const { return mActiveSequenceIndex; }
+			uint32_t GetActiveSequenceAnimation() const;
+
 			void PayCooldownAndMana() const;
 
 			// methods
@@ -327,6 +334,10 @@ namespace Game {
 			mutable glm::vec3 mActiveCursorPosition { 0.f, 0.f, 0.f };
 			mutable int32_t mActiveRank { 1 };
 			mutable bool mCooldownPaidThisTick { false };
+
+			uint32_t SelectSequenceIndex(const ObjectPtr& object) const;
+			mutable std::unordered_map<uint32_t, uint32_t> mSequenceCursor;
+			mutable uint32_t mActiveSequenceIndex { 0 };
 
 			sol::function mActivateFn;
 			sol::function mDeactivateFn;

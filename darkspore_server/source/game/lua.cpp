@@ -3,6 +3,7 @@
 #include "lua.h"
 #include "lua51_transpiler.h"
 #include "lua_thread_state.h"
+#include "animation_sequence.h"
 
 #include "instance.h"
 #include "objectmanager.h"
@@ -2406,6 +2407,7 @@ end
 		mActiveCursorPosition = cursorPosition;
 		mActiveRank = rank;
 		mCooldownPaidThisTick = false;
+		mActiveSequenceIndex = SelectSequenceIndex(object);
 
 		LuaThread* thread;
 		if (object) {
@@ -2426,6 +2428,50 @@ end
 			PayCooldownAndMana();
 		}
 		return true;
+	}
+
+	uint32_t Ability::SelectSequenceIndex(const ObjectPtr& object) const {
+		sol::object sequenceObject = mSelf["animationSequence"];
+		if (sequenceObject.get_type() != sol::type::table) {
+			return 0;
+		}
+		sol::table sequence = sequenceObject.as<sol::table>();
+		uint32_t entryCount = 0;
+		while (sequence.raw_get<sol::object>(entryCount + 1).get_type() == sol::type::table) {
+			++entryCount;
+		}
+
+		auto selection = AnimationSequence::Selection::Sequence;
+		sol::state_view state = mSelf.lua_state();
+		sol::object method = sequence["selectionMethod"];
+		if (sol::object methods = state["nAbilityAnimationSelection"]; methods.get_type() == sol::type::table) {
+			sol::table methodTable = methods.as<sol::table>();
+			const auto is = [&](const char* name) {
+				sol::object value = methodTable[name];
+				return value.get_type() != sol::type::lua_nil && value == method;
+			};
+			if (is("Random")) {
+				selection = AnimationSequence::Selection::Random;
+			} else if (is("Rank")) {
+				selection = AnimationSequence::Selection::Rank;
+			}
+		}
+
+		const uint32_t random = static_cast<uint32_t>(utils::random::get<float>(0.f, 1.f) * 65535.f);
+		return AnimationSequence::NextIndex(selection, entryCount, mSequenceCursor[object ? object->GetId() : 0], random);
+	}
+
+	uint32_t Ability::GetActiveSequenceAnimation() const {
+		sol::object sequenceObject = mSelf["animationSequence"];
+		if (sequenceObject.get_type() != sol::type::table) {
+			return 0;
+		}
+		sol::object entry = sequenceObject.as<sol::table>().raw_get<sol::object>(mActiveSequenceIndex + 1);
+		if (entry.get_type() != sol::type::table) {
+			return 0;
+		}
+		sol::object animation = entry.as<sol::table>()["animationstate"];
+		return animation.get_type() == sol::type::number ? animation.as<uint32_t>() : 0;
 	}
 
 	// Objective

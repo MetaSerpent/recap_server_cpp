@@ -16,6 +16,9 @@
 #include <glm/gtx/compatibility.hpp>
 
 #include <algorithm>
+#include <iostream>
+#include <string>
+#include <unordered_set>
 #include <filesystem>
 
 // Helpers
@@ -39,6 +42,33 @@ namespace {
 	auto LuaGetAbility(sol::this_state L) {
 		Game::Ability* ability = sol::state_view(L)["_ABILITY"];
 		return ability;
+	}
+
+	// Argument i of a variadic call, or nil when the script did not pass it.
+	sol::object LuaArg(const sol::variadic_args& args, size_t index) {
+		return index < args.size() ? sol::object(args[index]) : sol::make_object(args.lua_state(), sol::lua_nil);
+	}
+
+	// Scripts call a few engine functions in forms whose meaning is not known
+	// yet. They are accepted (never a Lua error) and reported once per run.
+	void LogUnsupportedCallForm(const char* function, size_t argumentCount) {
+		static std::unordered_set<std::string> reported;
+		if (reported.insert(std::string(function) + "/" + std::to_string(argumentCount)).second) {
+			std::cout << "Lua: " << function << " called with " << argumentCount
+			          << " argument(s); this form is not implemented, call ignored." << std::endl;
+		}
+	}
+
+	// nThreadData slots are addressed by number in game scripts (SetGUID(0, id))
+	// and by name in server scripts.
+	std::string ThreadDataKey(const sol::object& key) {
+		if (key.get_type() == sol::type::number) {
+			return "#" + std::to_string(key.as<int64_t>());
+		}
+		if (key.get_type() == sol::type::string) {
+			return key.as<std::string>();
+		}
+		return {};
 	}
 
 	auto LuaGetPlayer(const Game::Instance& instance, sol::object& value) {
@@ -1023,10 +1053,16 @@ namespace LuaFunction {
 
 				combatEvent.mDeltaHealth = std::get<1>(result);
 				combatEvent.mIntegerHpChange = static_cast<int32_t>(combatEvent.mDeltaHealth);
+				combatEvent.mSourceId = attacker ? attacker->GetId() : 0;
 
+				uint32_t flags = static_cast<uint32_t>(Game::CombatEventFlags::Hit);
 				if (std::get<2>(result)) {
-					combatEvent.mFlags = Game::CombatEventFlags::Critical;
+					flags |= static_cast<uint32_t>(Game::CombatEventFlags::Critical);
 				}
+				if (healthBeforeHit > 0.f && object->GetHealth() <= 0.f) {
+					flags |= static_cast<uint32_t>(Game::CombatEventFlags::KillingBlow);
+				}
+				combatEvent.mFlags = static_cast<Game::CombatEventFlags>(flags);
 
 				game.SendCombatEvent(combatEvent);
 				const float appliedDamage = std::max(0.f, healthBeforeHit - object->GetHealth());
@@ -1465,7 +1501,13 @@ namespace Game {
 
 	void LuaBase::RegisterAbility() {
 		auto ability = mState.create_named_table("nAbility");
-		ability["PreloadAnimation"] = [](sol::variadic_args) {};
+		ability["PreloadAnimation"] = [](sol::variadic_args args) -> uint32_t {
+			// Animation state ids are the resource hash of the animation name.
+			if (args.size() > 0 && args[0].get_type() == sol::type::string) {
+				return utils::hash_id(args[0].as<std::string>().c_str());
+			}
+			return 0u;
+		};
 		ability["PreloadAsset"] = [](sol::variadic_args) {};
 		ability["PreloadModifier"] = [](sol::variadic_args) {};
 		ability["RegisterAbility"] = [](sol::variadic_args) {};
@@ -1953,9 +1995,19 @@ namespace Game {
 			return { 0.f, 0.f, 0.f, 1.f };
 		};
 		gameObject["GetBaseOrientation"] = gameObject["GetOrientation"];
-		gameObject["SetOrientation"] = [this](sol::object objVal, float qx, float qy, float qz, float qw) {
+		gameObject["SetOrientation"] = [this](sol::variadic_args args) {
+			float q[4] {};
+			for (size_t i = 0; i < 4; ++i) {
+				sol::object component = LuaArg(args, i + 1);
+				if (component.get_type() != sol::type::number) {
+					LogUnsupportedCallForm("nGameObject.SetOrientation", args.size());
+					return;
+				}
+				q[i] = component.as<float>();
+			}
+			sol::object objVal = LuaArg(args, 0);
 			if (auto obj = LuaGetObject(mGame.GetObjectManager(), objVal)) {
-				obj->SetOrientation(glm::quat(qw, qx, qy, qz));
+				obj->SetOrientation(glm::quat(q[3], q[0], q[1], q[2]));
 			}
 		};
 		gameObject["GetObjectDirection"] = [this](sol::object fromVal, sol::object toVal) -> std::tuple<float, float, float> {
@@ -2475,14 +2527,37 @@ namespace Game {
 				return 0.f;
 			};
 			nAttribute["CreateAttributeSnapshot_FromObject"] = &LuaFunction::Object::GetAttributeSnapshot;
-			nAttribute["AddAttributeModifier"] = [this](sol::object objVal, uint8_t attrIdx, float delta) {
+			// handle = AddAttributeModifier(object, attributeType, value);
+			// RemoveAttributeModifier(handle) undoes exactly that change.
+			nAttribute["AddAttributeModifier"] = [this](sol::object objVal, uint8_t attrIdx, float delta) -> uint32_t {
 				if (auto obj = LuaGetObject(mGame.GetObjectManager(), objVal)) {
 					obj->SetAttributeValue(attrIdx, obj->GetAttributeValue(attrIdx) + delta);
+					return mAttributeModifiers.Add(obj->GetId(), attrIdx, delta);
 				}
+				return 0u;
 			};
-			nAttribute["RemoveAttributeModifier"] = [this](sol::object objVal, uint8_t attrIdx, float delta) {
-				if (auto obj = LuaGetObject(mGame.GetObjectManager(), objVal)) {
-					obj->SetAttributeValue(attrIdx, obj->GetAttributeValue(attrIdx) - delta);
+			nAttribute["RemoveAttributeModifier"] = [this](sol::variadic_args args) {
+				if (args.size() >= 3) {
+					// Explicit (object, attributeType, value) form.
+					sol::object objVal = LuaArg(args, 0);
+					sol::object attr = LuaArg(args, 1);
+					sol::object delta = LuaArg(args, 2);
+					if (attr.get_type() == sol::type::number && delta.get_type() == sol::type::number) {
+						if (auto obj = LuaGetObject(mGame.GetObjectManager(), objVal)) {
+							const auto attrIdx = attr.as<uint8_t>();
+							obj->SetAttributeValue(attrIdx, obj->GetAttributeValue(attrIdx) - delta.as<float>());
+						}
+					}
+					return;
+				}
+				sol::object handle = LuaArg(args, 0);
+				if (handle.get_type() != sol::type::number) {
+					return; // nil handle: nothing was applied
+				}
+				if (const auto entry = mAttributeModifiers.Remove(handle.as<uint32_t>())) {
+					if (auto obj = mGame.GetObjectManager().Get(entry->objectId)) {
+						obj->SetAttributeValue(entry->attribute, obj->GetAttributeValue(entry->attribute) - entry->delta);
+					}
 				}
 			};
 			nAttribute["GetHealthMultiplierForDifficulty"] = []() -> float { return 1.0f; };
@@ -2491,50 +2566,65 @@ namespace Game {
 		// nThreadData
 		{
 			auto nThreadData = mState["nThreadData"].get_or_create<sol::table>();
-			nThreadData["CreatePrivateTable"] = [this](sol::object objVal) {
+			// CreatePrivateTable() / GetPrivateTable(): storage private to the
+			// running script thread (game form, no arguments). With an object or
+			// id argument the table is shared per object (server form).
+			const auto privateTable = [this](sol::this_state L, sol::variadic_args args, bool create) -> sol::object {
+				sol::object objVal = LuaArg(args, 0);
 				if (auto obj = LuaGetObject(mGame.GetObjectManager(), objVal)) {
-					return CreatePrivateTable(obj->GetId());
+					return sol::make_object(L, CreatePrivateTable(obj->GetId()));
 				}
-				if (objVal.is<uint32_t>()) {
-					return CreatePrivateTable(objVal.as<uint32_t>());
+				if (objVal.get_type() == sol::type::number) {
+					return sol::make_object(L, CreatePrivateTable(objVal.as<uint32_t>()));
 				}
-				return CreatePrivateTable(0);
+				auto thread = GetThread(L);
+				if (!thread) {
+					return sol::make_object(L, CreatePrivateTable(0));
+				}
+				sol::object existing = thread->get_value("__private_table");
+				if (existing.get_type() == sol::type::table || !create) {
+					return existing;
+				}
+				sol::table table = sol::state_view(L).create_table();
+				thread->set_value("__private_table", sol::make_object(L, table));
+				return sol::make_object(L, table);
 			};
-			nThreadData["GetPrivateTable"] = nThreadData["CreatePrivateTable"];
-			nThreadData["GetFloat"] = [this](sol::this_state L, std::string key) -> float {
+			nThreadData["CreatePrivateTable"] = [privateTable](sol::this_state L, sol::variadic_args args) { return privateTable(L, args, true); };
+			nThreadData["GetPrivateTable"] = [privateTable](sol::this_state L, sol::variadic_args args) { return privateTable(L, args, false); };
+			nThreadData["GetFloat"] = [this](sol::this_state L, sol::object key) -> float {
 				if (auto thread = GetThread(L)) {
-					sol::object v = thread->get_value(key);
-					if (v.is<float>()) { return v.as<float>(); }
+					sol::object v = thread->get_value(ThreadDataKey(key));
+					if (v.get_type() == sol::type::number) { return v.as<float>(); }
 				}
 				return 0.f;
 			};
-			nThreadData["SetFloat"] = [this](sol::this_state L, std::string key, float val) {
+			nThreadData["SetFloat"] = [this](sol::this_state L, sol::object key, float val) {
 				if (auto thread = GetThread(L)) {
-					thread->set_value(key, sol::make_object(L, val));
+					thread->set_value(ThreadDataKey(key), sol::make_object(L, val));
 				}
 			};
-			nThreadData["GetInt"] = [this](sol::this_state L, std::string key) -> int32_t {
+			nThreadData["GetInt"] = [this](sol::this_state L, sol::object key) -> int32_t {
 				if (auto thread = GetThread(L)) {
-					sol::object v = thread->get_value(key);
-					if (v.is<int32_t>()) { return v.as<int32_t>(); }
+					sol::object v = thread->get_value(ThreadDataKey(key));
+					if (v.get_type() == sol::type::number) { return v.as<int32_t>(); }
 				}
 				return 0;
 			};
-			nThreadData["SetInt"] = [this](sol::this_state L, std::string key, int32_t val) {
+			nThreadData["SetInt"] = [this](sol::this_state L, sol::object key, int32_t val) {
 				if (auto thread = GetThread(L)) {
-					thread->set_value(key, sol::make_object(L, val));
+					thread->set_value(ThreadDataKey(key), sol::make_object(L, val));
 				}
 			};
-			nThreadData["GetGUID"] = [this](sol::this_state L, std::string key) -> uint32_t {
+			nThreadData["GetGUID"] = [this](sol::this_state L, sol::object key) -> uint32_t {
 				if (auto thread = GetThread(L)) {
-					sol::object v = thread->get_value(key);
-					if (v.is<uint32_t>()) { return v.as<uint32_t>(); }
+					sol::object v = thread->get_value(ThreadDataKey(key));
+					if (v.get_type() == sol::type::number) { return v.as<uint32_t>(); }
 				}
 				return 0u;
 			};
-			nThreadData["SetGUID"] = [this](sol::this_state L, std::string key, uint32_t val) {
+			nThreadData["SetGUID"] = [this](sol::this_state L, sol::object key, uint32_t val) {
 				if (auto thread = GetThread(L)) {
-					thread->set_value(key, sol::make_object(L, val));
+					thread->set_value(ThreadDataKey(key), sol::make_object(L, val));
 				}
 			};
 		}
@@ -2993,7 +3083,12 @@ namespace Game {
 		objectManager["GetObject"] = &LuaFunction::nObjectManager_GetObject;
 		objectManager["CreateObject"] = sol::overload(
 			&LuaFunction::nObjectManager_CreateObject,
-			&LuaFunction::nObjectManager_CreateObjectCoords
+			&LuaFunction::nObjectManager_CreateObjectCoords,
+			// Game form CreateObject(noun): the script positions the object afterwards.
+			[this](sol::object nounObj) -> uint32_t {
+				auto object = mGame.GetObjectManager().Create(LuaExtractAssetOrGuid(nounObj, 0));
+				return object ? object->GetId() : 0u;
+			}
 		);
 		objectManager["CreateCreature"] = &LuaFunction::nObjectManager_CreateObjectCoords;
 
@@ -3261,8 +3356,20 @@ namespace Game {
 		nPlayer["UnlockOverdrive"] = [](sol::variadic_args) {};
 		nPlayer["CanDeployCreatureFromCurrentDeck"] = [](sol::variadic_args) { return true; };
 		nPlayer["DeployNextCreature"] = [](sol::variadic_args) {};
-		nPlayer["GetCurrentDeckIndex"] = [this](sol::object playerVal) -> int32_t {
+		// Game scripts omit the player: it is the player of the casting hero.
+		const auto scriptPlayer = [this](sol::this_state L, sol::object playerVal) -> Game::PlayerPtr {
 			if (auto p = LuaGetPlayer(mGame, playerVal)) {
+				return p;
+			}
+			if (auto ab = LuaGetAbility(L)) {
+				if (auto agent = ab->GetActiveAgent()) {
+					return agent->GetPlayer();
+				}
+			}
+			return {};
+		};
+		nPlayer["GetCurrentDeckIndex"] = [scriptPlayer](sol::this_state L, sol::variadic_args args) -> int32_t {
+			if (auto p = scriptPlayer(L, LuaArg(args, 0))) {
 				return p->GetCurrentDeckIndex();
 			}
 			return 0;
@@ -3274,18 +3381,28 @@ namespace Game {
 		nPlayer["IsCrystalSlotAvailable"] = [](sol::variadic_args) { return true; };
 		nPlayer["UnlockCrystals"] = [](sol::variadic_args) {};
 		nPlayer["DropCrystals"] = [](sol::variadic_args) {};
-		nPlayer["GetHealthOfCreatureAtDeckIndex"] = [this](sol::object playerVal, uint32_t idx) -> float {
-			if (auto p = LuaGetPlayer(mGame, playerVal)) {
-				if (auto c = p->GetCharacterObject(idx)) {
-					return c->GetHealth();
+		nPlayer["GetHealthOfCreatureAtDeckIndex"] = [scriptPlayer](sol::this_state L, sol::variadic_args args) -> float {
+			// (player, deckIndex) or the game form (deckIndex).
+			const bool hasPlayer = args.size() >= 2;
+			sol::object index = LuaArg(args, hasPlayer ? 1 : 0);
+			if (index.get_type() == sol::type::number) {
+				if (auto p = scriptPlayer(L, hasPlayer ? LuaArg(args, 0) : sol::make_object(L, sol::lua_nil))) {
+					if (auto c = p->GetCharacterObject(index.as<uint32_t>())) {
+						return c->GetHealth();
+					}
 				}
 			}
 			return 100.f;
 		};
-		nPlayer["GetMaxHealthOfCreatureAtDeckIndex"] = [this](sol::object playerVal, uint32_t idx) -> float {
-			if (auto p = LuaGetPlayer(mGame, playerVal)) {
-				if (auto c = p->GetCharacterObject(idx)) {
-					return c->GetMaxHealth();
+		nPlayer["GetMaxHealthOfCreatureAtDeckIndex"] = [scriptPlayer](sol::this_state L, sol::variadic_args args) -> float {
+			// (player, deckIndex) or the game form (deckIndex).
+			const bool hasPlayer = args.size() >= 2;
+			sol::object index = LuaArg(args, hasPlayer ? 1 : 0);
+			if (index.get_type() == sol::type::number) {
+				if (auto p = scriptPlayer(L, hasPlayer ? LuaArg(args, 0) : sol::make_object(L, sol::lua_nil))) {
+					if (auto c = p->GetCharacterObject(index.as<uint32_t>())) {
+						return c->GetMaxHealth();
+					}
 				}
 			}
 			return 100.f;
@@ -3495,7 +3612,13 @@ namespace Game {
 		};
 
 		auto nAbility = mState["nAbility"].get_or_create<sol::table>();
-		nAbility["PreloadAnimation"] = [](sol::variadic_args) {};
+		nAbility["PreloadAnimation"] = [](sol::variadic_args args) -> uint32_t {
+			// Animation state ids are the resource hash of the animation name.
+			if (args.size() > 0 && args[0].get_type() == sol::type::string) {
+				return utils::hash_id(args[0].as<std::string>().c_str());
+			}
+			return 0u;
+		};
 		nAbility["PreloadAsset"] = [](sol::variadic_args) {};
 		nAbility["PreloadModifier"] = [](sol::variadic_args) {};
 		nAbility["RegisterAbility"] = registerAbilityLambda;
@@ -3546,7 +3669,13 @@ namespace Game {
 			}
 			return 1;
 		};
-		nAbility["GetAnimationSequenceIndex"] = [](sol::variadic_args) -> int32_t { return 1; };
+		// Zero-based: the game helpers read animationSequence[index + 1].
+		nAbility["GetAnimationSequenceIndex"] = [this](sol::this_state L, sol::variadic_args) -> int32_t {
+			if (auto ab = LuaGetAbility(L)) {
+				return static_cast<int32_t>(ab->GetActiveSequenceIndex());
+			}
+			return 0;
+		};
 		nAbility["GetAbilityInstanceID"] = [this](sol::this_state L, sol::variadic_args) -> uint32_t {
 			if (auto ab = LuaGetAbility(L)) {
 				return ab->GetId();
@@ -3593,7 +3722,20 @@ namespace Game {
 				ab->PayCooldownAndMana();
 			}
 		};
-		nAbility["PlayAnimationSequence"] = [this](sol::this_state L, sol::object agentVal, sol::object seqVal, sol::variadic_args) {
+		nAbility["PlayAnimationSequence"] = [this](sol::this_state L, sol::variadic_args args) {
+			if (args.size() == 0) {
+				// Game form: play the current entry of the casting ability
+				// animationSequence on its agent.
+				if (auto ab = LuaGetAbility(L)) {
+					const auto animation = ab->GetActiveSequenceAnimation();
+					if (auto agent = ab->GetActiveAgent(); agent && animation != 0) {
+						mGame.SendAnimationState(agent, animation);
+					}
+				}
+				return;
+			}
+			sol::object agentVal = LuaArg(args, 0);
+			sol::object seqVal = LuaArg(args, 1);
 			auto agent = LuaGetObject(mGame.GetObjectManager(), agentVal);
 			if (!agent) {
 				if (auto ab = LuaGetAbility(L)) {
@@ -3621,10 +3763,25 @@ namespace Game {
 		nAbility["AddCooldownTime"] = [this](sol::this_state L, sol::object objVal, uint32_t abilityId, float seconds) {
 			LuaFunction::Object::AddCooldown(L, objVal, abilityId, static_cast<uint32_t>(std::max(0.f, seconds) * 1000.f));
 		};
-		nAbility["RemoveCooldownTime"] = [this](sol::this_state L, sol::object objVal, uint32_t abilityId, float seconds) {
-			LuaFunction::Object::RemoveCooldown(L, objVal, abilityId, static_cast<uint32_t>(std::max(0.f, seconds) * 1000.f));
+		nAbility["RemoveCooldownTime"] = [this](sol::this_state L, sol::variadic_args args) {
+			sol::object abilityId = LuaArg(args, 1);
+			sol::object seconds = LuaArg(args, 2);
+			if (abilityId.get_type() != sol::type::number || seconds.get_type() != sol::type::number) {
+				LogUnsupportedCallForm("nAbility.RemoveCooldownTime", args.size());
+				return;
+			}
+			LuaFunction::Object::RemoveCooldown(L, LuaArg(args, 0), abilityId.as<uint32_t>(),
+				static_cast<uint32_t>(std::max(0.f, seconds.as<float>()) * 1000.f));
 		};
-		nAbility["ScaleCooldownTime"] = &LuaFunction::Object::ScaleCooldown;
+		nAbility["ScaleCooldownTime"] = [this](sol::this_state L, sol::variadic_args args) {
+			sol::object abilityId = LuaArg(args, 1);
+			sol::object scale = LuaArg(args, 2);
+			if (abilityId.get_type() != sol::type::number || scale.get_type() != sol::type::number) {
+				LogUnsupportedCallForm("nAbility.ScaleCooldownTime", args.size());
+				return;
+			}
+			LuaFunction::Object::ScaleCooldown(L, LuaArg(args, 0), abilityId.as<uint32_t>(), scale.as<float>());
+		};
 		nAbility["ResetAbilityCooldown"] = [this](sol::this_state L, sol::object objVal, uint32_t abilityId) {
 			LuaFunction::Object::ScaleCooldown(L, objVal, abilityId, 0.f);
 		};

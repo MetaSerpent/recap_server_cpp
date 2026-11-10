@@ -141,6 +141,9 @@ namespace Game {
 	// CombatEvent
 	enum class CombatEventFlags : uint32_t {
 		None = 0x000000,
+		// Set on every damage event; a kill is Hit | KillingBlow (0x0005).
+		// Source: darkspin server/sim/raknet103/encoder.go (DamageIntent).
+		Hit = 0x000001,
 		KillingBlow = 0x000004,
 		Critical = 0x000008,
 		Deflect = 0x000010,

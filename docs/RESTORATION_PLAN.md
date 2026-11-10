@@ -453,3 +453,58 @@ attribute for indices 74-111 (immunities, DoT/aggro modifiers); 0-73 (health,
 mana, damage, crit, speed, `AoERadius` 62) are unaffected. The server enum may
 be correct for 5.3.0.127, so this needs a version-aware fix with its own tests
 rather than a reorder. Next slice after combat is confirmed on screen.
+
+### Seventh client session on `a5d8bdb` (2026-11-11): what the player sees
+
+Player report: heroes "cannot use their abilities"; occasional hits land with
+no visual feedback; basic attacks and abilities feel blocked. Server log for
+the same session: 44 casts, 15 `CombatEvent`, **0** `SetAnimationState`,
+2 `ActionCommandResponse`, 29 casts aborted at
+`template_ability_melee.lua:141` and 3 at `template_ability_instantcast.lua:172`.
+
+Sources used below: the user's 5.3.0.103 scripts, and darkspin
+(https://github.com/darkspinnet/darkspin, MIT), an independent server with
+build-103 packet encoders (`server/raknet/application.go`,
+`server/sim/raknet103/encoder.go`, `server/zone/action/raknet103/response.go`).
+
+Fixed in this commit (implemented, unit/contract-tested; **client effect not
+verified yet**):
+
+- **Calls rejected by the new argument checks.** `tools/lua_audit/arity_audit.py`
+  compares script calls with binding signatures: 10 functions / 303 call sites
+  passed fewer arguments than required and 6 parameters had the wrong type.
+  `nAbility.PlayAnimationSequence()` (no arguments), `nThreadData` slots keyed
+  by number (`SetGUID(0, id)`), `CreatePrivateTable()` per script thread,
+  `nPlayer.*` without a player, `CreateObject(noun)`. Forms whose meaning is
+  unknown (`RemoveCooldownTime(x)`, `ScaleCooldownTime(obj, scale)`,
+  `SetOrientation(obj, x)`; 5 call sites) are accepted and logged once.
+- **Attribute modifiers.** Scripts use `handle = AddAttributeModifier(obj,
+  attr, value)` and `RemoveAttributeModifier(handle)` (79 sites). The binding
+  returned nothing, so buffs/debuffs were never removed. Now a handle registry.
+- **Animations never played.** `nAbility.PreloadAnimation(name, ...)` returned
+  nil, so every `animationstate` was nil; it now returns the animation id
+  (resource hash of the name, as darkspin sends). `GetAnimationSequenceIndex`
+  returned a constant 1; the game's `GetTimeToReleaseLua` reads
+  `animationSequence[index + 1]`, so it is zero-based and now cycles per actor
+  (`game/animation_sequence.h`). `PlayAnimationSequence()` plays the current
+  entry. `SetAnimationState`'s last field is 0, not a copy of the state.
+- **Hits without feedback.** `CombatEvent` wrote its flags as 32 bits; build 103
+  reflects 16, so delta, target and source were shifted by two bytes. Events
+  now also carry the attacker and the flags darkspin uses (0x0001 hit, 0x0004
+  killing blow, 0x0008 critical).
+
+**Next slice: action responses (the "blocked" feeling).** Upstream disabled
+`ActionCommandResponse` for hero abilities in `08d2633` ("crashes the game"),
+so the client never learns that a cast was accepted or refused. darkspin's
+build-103 layout (56 bytes): `[0]` sync stamp = byte 1 of the client's action
+command (`ActionCommandCommonData::unk[0]`; upstream sent 0), `[1]` type
+(1 accepted, 2 rejected, 4 released, 8 pursuit, 16 clear user data), `[4]`
+ability hash (object id for a rejection), `[8]` ability index, `[16]/[24]/[32]`
+start / commit / end in server-clock milliseconds, `[40]` global cooldown,
+`[52]` user data `0xFFFFFFFF`. A basic attack sends Accepted at cast time with
+commit = start + hit and end = start + release, then Released at the release
+time, and Rejected for refused casts. The hit/release times are in the game's
+own data: `animationSequence[i].hit` / `.release` (or `timetohit` /
+`timetorelease`). Implement as: encoder in a tested header, Accepted after a
+successful `UseAbility`, Rejected otherwise, Released scheduled at `release`.
+Crash risk exists (upstream's attempt crashed); keep it isolated in one commit.

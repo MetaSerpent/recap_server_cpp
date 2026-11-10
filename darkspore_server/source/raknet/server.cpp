@@ -1923,7 +1923,9 @@ namespace RakNet {
 		Write<uint64_t>(outStream, timestamp);
 		Write<bool>(outStream, overlay);
 		Write<float>(outStream, scale);
-		Write<uint32_t>(outStream, state); // some client data?
+		// Build 103 expects zero here (source/echo gate), not a copy of the state.
+		// Source: darkspin server/raknet/application.go, SetAnimationStateMessage.
+		Write<uint32_t>(outStream, 0);
 
 		Send(outStream, client);
 	}
