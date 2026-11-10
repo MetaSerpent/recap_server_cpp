@@ -3,6 +3,7 @@
 #include "lua.h"
 #include "ability_registration.h"
 #include "combat_call.h"
+#include "lua_type_filter.h"
 
 #include "instance.h"
 #include "objectmanager.h"
@@ -374,28 +375,40 @@ namespace LuaFunction {
 		return result;
 	}
 
-	sol::table nObjectManager_GetObjectsInRadiusCoords(sol::this_state L, float x, float y, float z, float radius, sol::optional<sol::table> objectTypes) {
+	// Shared implementation of the coordinate forms used by game scripts:
+	// (x, y, z, radius[, type | {types}]). See game/lua_type_filter.h.
+	enum class RadiusSort { None, Nearest, Furthest };
+
+	sol::table ObjectIdsInRadius(sol::this_state L, float x, float y, float z, float radius,
+	                             const std::vector<uint32_t>& typeFilter, RadiusSort sort) {
 		auto& game = LuaGetGame(L);
 		glm::vec3 position(x, y, z);
 
 		std::vector<Game::NounType> types;
-		if (objectTypes.has_value()) {
-			for (const auto& entry : *objectTypes) {
-				if (entry.second.is<uint32_t>()) {
-					types.push_back(static_cast<Game::NounType>(entry.second.as<uint32_t>()));
-				}
-			}
+		types.reserve(typeFilter.size());
+		for (const auto type : typeFilter) {
+			types.push_back(static_cast<Game::NounType>(type));
 		}
 
 		auto objects = game.GetObjectManager().GetObjectsInRadius(Game::BoundingSphere(position, radius), types);
-		auto objectCount = static_cast<int>(objects.size());
+		if (sort != RadiusSort::None) {
+			std::sort(objects.begin(), objects.end(), [&position, sort](const auto& lhs, const auto& rhs) {
+				const float left = glm::distance(position, lhs->GetPosition());
+				const float right = glm::distance(position, rhs->GetPosition());
+				return sort == RadiusSort::Nearest ? left < right : left > right;
+			});
+		}
 
+		auto objectCount = static_cast<int>(objects.size());
 		auto result = sol::state_view(L).create_table(objectCount, 0);
 		for (int i = 0; i < objectCount; ++i) {
 			result[i + 1] = objects[i]->GetId();
 		}
-
 		return result;
+	}
+
+	sol::table nObjectManager_GetObjectsInRadiusCoords(sol::this_state L, float x, float y, float z, float radius, sol::variadic_args rest) {
+		return ObjectIdsInRadius(L, x, y, z, radius, Game::LuaTypeFilter::Read(rest, 0), RadiusSort::None);
 	}
 
 	auto nObjectManager_GetObjectsInRadius_SortedByDistance(sol::this_state L, glm::vec3 position, float radius, sol::table objectTypes) {
@@ -420,58 +433,12 @@ namespace LuaFunction {
 		return result;
 	}
 
-	sol::table nObjectManager_GetObjectsInRadiusCoords_SortedByDistance(sol::this_state L, float x, float y, float z, float radius, sol::optional<sol::table> objectTypes) {
-		auto& game = LuaGetGame(L);
-		glm::vec3 position(x, y, z);
-
-		std::vector<Game::NounType> types;
-		if (objectTypes.has_value()) {
-			for (const auto& entry : *objectTypes) {
-				if (entry.second.is<uint32_t>()) {
-					types.push_back(static_cast<Game::NounType>(entry.second.as<uint32_t>()));
-				}
-			}
-		}
-
-		auto objects = game.GetObjectManager().GetObjectsInRadius(Game::BoundingSphere(position, radius), types);
-		std::sort(objects.begin(), objects.end(), [&position](const auto& lhs, const auto& rhs) {
-			return glm::distance(position, lhs->GetPosition()) < glm::distance(position, rhs->GetPosition());
-		});
-
-		auto objectCount = static_cast<int>(objects.size());
-		auto result = sol::state_view(L).create_table(objectCount, 0);
-		for (int i = 0; i < objectCount; ++i) {
-			result[i + 1] = objects[i]->GetId();
-		}
-
-		return result;
+	sol::table nObjectManager_GetObjectsInRadiusCoords_SortedByDistance(sol::this_state L, float x, float y, float z, float radius, sol::variadic_args rest) {
+		return ObjectIdsInRadius(L, x, y, z, radius, Game::LuaTypeFilter::Read(rest, 0), RadiusSort::Nearest);
 	}
 
-	sol::table nObjectManager_GetObjectsInRadiusCoords_SortedByFurthestDistance(sol::this_state L, float x, float y, float z, float radius, sol::optional<sol::table> objectTypes) {
-		auto& game = LuaGetGame(L);
-		glm::vec3 position(x, y, z);
-
-		std::vector<Game::NounType> types;
-		if (objectTypes.has_value()) {
-			for (const auto& entry : *objectTypes) {
-				if (entry.second.is<uint32_t>()) {
-					types.push_back(static_cast<Game::NounType>(entry.second.as<uint32_t>()));
-				}
-			}
-		}
-
-		auto objects = game.GetObjectManager().GetObjectsInRadius(Game::BoundingSphere(position, radius), types);
-		std::sort(objects.begin(), objects.end(), [&position](const auto& lhs, const auto& rhs) {
-			return glm::distance(position, lhs->GetPosition()) > glm::distance(position, rhs->GetPosition());
-		});
-
-		auto objectCount = static_cast<int>(objects.size());
-		auto result = sol::state_view(L).create_table(objectCount, 0);
-		for (int i = 0; i < objectCount; ++i) {
-			result[i + 1] = objects[i]->GetId();
-		}
-
-		return result;
+	sol::table nObjectManager_GetObjectsInRadiusCoords_SortedByFurthestDistance(sol::this_state L, float x, float y, float z, float radius, sol::variadic_args rest) {
+		return ObjectIdsInRadius(L, x, y, z, radius, Game::LuaTypeFilter::Read(rest, 0), RadiusSort::Furthest);
 	}
 
 	// Locomotion
@@ -3063,10 +3030,11 @@ namespace Game {
 			&LuaFunction::nObjectManager_GetObjectsInRadiusCoords_SortedByDistance
 		);
 		objectManager["GetObjectsInRadius_SortedByFurthestDistance"] = &LuaFunction::nObjectManager_GetObjectsInRadiusCoords_SortedByFurthestDistance;
-		objectManager["GetObjectsAlongLine"] = [this](float ax, float ay, float az, float bx, float by, float bz, float width, sol::optional<sol::table> types) {
+		objectManager["GetObjectsAlongLine"] = [this](float ax, float ay, float az, float bx, float by, float bz, float width, sol::variadic_args rest) {
 			glm::vec3 mid = (glm::vec3(ax, ay, az) + glm::vec3(bx, by, bz)) * 0.5f;
 			float r = glm::distance(glm::vec3(ax, ay, az), glm::vec3(bx, by, bz)) * 0.5f + std::max(width, 1.f);
-			return LuaFunction::nObjectManager_GetObjectsInRadiusCoords(mState.lua_state(), mid.x, mid.y, mid.z, r, types);
+			return LuaFunction::ObjectIdsInRadius(mState.lua_state(), mid.x, mid.y, mid.z, r,
+				LuaTypeFilter::Read(rest, 0), LuaFunction::RadiusSort::None);
 		};
 		objectManager["GetObjectsOfOwner"] = [this](sol::object ownerVal, sol::variadic_args) {
 			sol::table res = mState.create_table();

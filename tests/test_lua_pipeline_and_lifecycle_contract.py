@@ -88,6 +88,23 @@ class LuaPipelineAndLifecycleContracts(unittest.TestCase):
         self.assertIn("/DEBUG /OPT:REF /OPT:ICF", cmake)
         self.assertIn("$<TARGET_PDB_FILE:recap_server>", cmake)
 
+    def test_sol2_checks_bound_function_arguments_in_release(self):
+        cmake = (ROOT.parents[0] / "CMakeLists.txt").read_text(encoding="utf-8")
+        defines = next(line for line in cmake.splitlines() if line.startswith("add_definitions(-DSOL_"))
+        self.assertIn("-DSOL_SAFE_FUNCTION_CALLS=1", defines)
+        self.assertIn("-DSOL_SAFE_USERTYPE=1", defines)
+        # sol2 3.3.1 has no SOL_SAFE_FUNCTION macro; defining it enables nothing.
+        self.assertNotIn("-DSOL_SAFE_FUNCTION=1", defines)
+        # Strict integer conversion would reject the fractional numbers scripts pass.
+        self.assertNotIn("SOL_SAFE_NUMERICS", defines)
+        self.assertNotIn("SOL_ALL_SAFETIES_ON", defines)
+
+    def test_radius_queries_accept_a_type_or_a_table_of_types(self):
+        self.assertNotIn("sol::optional<sol::table> objectTypes", LUA_FN)
+        self.assertNotIn("float width, sol::optional<sol::table> types", LUA_FN)
+        self.assertEqual(LUA_FN.count("Game::LuaTypeFilter::Read(rest, 0)"), 3)
+        self.assertIn("LuaTypeFilter::Read(rest, 0), LuaFunction::RadiusSort::None", LUA_FN)
+
     def test_redistributable_fixture_is_executed_in_ci(self):
         workflow = (ROOT.parents[1] / ".github/workflows/gameplay-guardrails.yml").read_text(encoding="utf-8")
         self.assertIn("tests/lua51_transpiler_test.cpp", workflow)

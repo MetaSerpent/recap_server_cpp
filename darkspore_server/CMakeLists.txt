@@ -21,7 +21,14 @@ file(GLOB_RECURSE RECAP_SOURCES "${CMAKE_CURRENT_LIST_DIR}/source/*.cpp")
 add_definitions(-D_WIN32_WINNT=0x0601 -D_CRT_SECURE_NO_WARNINGS -DWIN32_LEAN_AND_MEAN -DNOMINMAX)
 add_definitions(-DBOOST_NETWORK_ENABLE_HTTPS -DBOOST_ASIO_DISABLE_CONCEPTS)
 add_definitions(-DRAPIDJSON_HAS_STDSTRING)
-add_definitions(-DSOL_STRINGS_ARE_NUMBERS=1 -DSOL_SAFE_FUNCTION=1 -DSOL_LUAJIT=1 -DSOL_EXCEPTIONS_SAFE_PROPAGATION=1)
+# sol2 3.3.1 enables its checks only in debug builds; CI ships Release, where a
+# bound function declared with sol::table/sol::function silently accepted any
+# Lua value and read memory through it (server crash on the first melee hit).
+# SOL_SAFE_FUNCTION_CALLS type-checks arguments of bound functions and
+# SOL_SAFE_USERTYPE checks 'self'; mismatches become Lua errors. The former
+# -DSOL_SAFE_FUNCTION=1 is not a macro sol2 recognises and had no effect.
+# SOL_SAFE_NUMERICS stays off: scripts pass fractional numbers to integers.
+add_definitions(-DSOL_STRINGS_ARE_NUMBERS=1 -DSOL_SAFE_FUNCTION_CALLS=1 -DSOL_SAFE_USERTYPE=1 -DSOL_LUAJIT=1 -DSOL_EXCEPTIONS_SAFE_PROPAGATION=1)
 
 add_executable(recap_server ${RECAP_HEADERS} ${RECAP_SOURCES})
 source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} FILES ${RECAP_HEADERS} ${RECAP_SOURCES})

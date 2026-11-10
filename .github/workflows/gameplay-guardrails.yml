@@ -82,12 +82,16 @@ jobs:
           git -C /tmp/luajit checkout -q ea9eb7edb5eac4a9d175d74523db34fac0fa5180
           make -s -C /tmp/luajit/src libluajit.a -j4
           git clone -q --depth 1 --branch v3.3.1 https://github.com/ThePhD/sol2.git /tmp/sol2
-          g++ -std=c++23 -Wall -Wextra -Werror -pedantic -DSOL_LUAJIT=1 -DSOL_SAFE_FUNCTION=1 -DSOL_EXCEPTIONS_SAFE_PROPAGATION=1             -isystem /tmp/sol2/include -isystem /tmp/luajit/src tests/ability_registration_test.cpp /tmp/luajit/src/libluajit.a -ldl -lm             -o /tmp/ability_registration_test
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic -DSOL_LUAJIT=1 -DSOL_SAFE_FUNCTION_CALLS=1 -DSOL_SAFE_USERTYPE=1 -DSOL_EXCEPTIONS_SAFE_PROPAGATION=1             -isystem /tmp/sol2/include -isystem /tmp/luajit/src tests/ability_registration_test.cpp /tmp/luajit/src/libluajit.a -ldl -lm             -o /tmp/ability_registration_test
           /tmp/ability_registration_test
-          g++ -std=c++23 -Wall -Wextra -Werror -pedantic -DSOL_LUAJIT=1 -DSOL_SAFE_FUNCTION=1 -DSOL_EXCEPTIONS_SAFE_PROPAGATION=1             -isystem /tmp/sol2/include -isystem /tmp/luajit/src tests/lua_thread_recovery_test.cpp /tmp/luajit/src/libluajit.a -ldl -lm             -o /tmp/lua_thread_recovery_test
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic -DSOL_LUAJIT=1 -DSOL_SAFE_FUNCTION_CALLS=1 -DSOL_SAFE_USERTYPE=1 -DSOL_EXCEPTIONS_SAFE_PROPAGATION=1             -isystem /tmp/sol2/include -isystem /tmp/luajit/src tests/lua_thread_recovery_test.cpp /tmp/luajit/src/libluajit.a -ldl -lm             -o /tmp/lua_thread_recovery_test
           /tmp/lua_thread_recovery_test
-          g++ -std=c++23 -Wall -Wextra -Werror -pedantic -DSOL_LUAJIT=1 -DSOL_SAFE_FUNCTION=1 -DSOL_EXCEPTIONS_SAFE_PROPAGATION=1 -DSOL_STRINGS_ARE_NUMBERS=1             -isystem /tmp/sol2/include -isystem /tmp/luajit/src tests/combat_call_test.cpp /tmp/luajit/src/libluajit.a -ldl -lm             -o /tmp/combat_call_test
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic -DSOL_LUAJIT=1 -DSOL_SAFE_FUNCTION_CALLS=1 -DSOL_SAFE_USERTYPE=1 -DSOL_EXCEPTIONS_SAFE_PROPAGATION=1 -DSOL_STRINGS_ARE_NUMBERS=1             -isystem /tmp/sol2/include -isystem /tmp/luajit/src tests/combat_call_test.cpp /tmp/luajit/src/libluajit.a -ldl -lm             -o /tmp/combat_call_test
           /tmp/combat_call_test
+          # Release configuration (-O2 -DNDEBUG): sol2 checks argument types there only
+          # with SOL_SAFE_FUNCTION_CALLS, the same defines as darkspore_server/CMakeLists.txt.
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic -O2 -DNDEBUG -DSOL_STRINGS_ARE_NUMBERS=1 -DSOL_SAFE_FUNCTION_CALLS=1 -DSOL_SAFE_USERTYPE=1 -DSOL_LUAJIT=1 -DSOL_EXCEPTIONS_SAFE_PROPAGATION=1             -isystem /tmp/sol2/include -isystem /tmp/luajit/src tests/lua_type_filter_test.cpp /tmp/luajit/src/libluajit.a -ldl -lm             -o /tmp/lua_type_filter_test
+          /tmp/lua_type_filter_test
       - name: Squads reference owned creatures, not templates
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/squad_repair_test.cpp -o /tmp/squad_repair_test

@@ -398,3 +398,58 @@ Fix (implemented, unit-tested in sol2 + LuaJIT, needs client rerun):
 `game/combat_call.h` parses both calls in the game order with every argument
 type-checked; the attacker is the snapshot's owner object. Release builds now
 produce and ship `recap_server.pdb` so future dumps resolve to source lines.
+
+### Sixth client session on `e81710e` (2026-11-10): first damage dealt
+
+No server crash and no client crash; the player quit normally. The server
+sent 23 `CombatEvent` packets and one death (`SetObjectGfxState` "dead" plus
+`SetAnimationState`); no objective update (1 kill of ~340 rounds to 0 %).
+What the player saw on screen is not yet confirmed. One Lua error, three
+times: `ability_entangling_rush.lua:209: sol: no matching function call`.
+
+Cause: `nObjectManager.GetObjectsInRadius(x, y, z, radius, kType_Creature)`.
+Scripts pass the type filter as a single number (60 calls) or a table of types
+(48 calls) or omit it; the coordinate bindings only accepted a table. Fixed
+with `game/lua_type_filter.h` for `GetObjectsInRadius`, both sorted variants
+and `GetObjectsAlongLine`.
+
+**sol2 safety in Release (root cause class of the session-5 crash).** sol2
+3.3.1 enables its checks only in debug builds. CI ships Release, where a bound
+function declared with `sol::table`/`sol::function` accepts any Lua value and
+reads memory through it; measured with the server's flags: `TakesTable(5)`
+runs its body with a bogus table. `-DSOL_SAFE_FUNCTION=1` in CMake is not a
+macro this sol2 version defines and never had an effect. Now
+`-DSOL_SAFE_FUNCTION_CALLS=1 -DSOL_SAFE_USERTYPE=1`: argument and `self` type
+mismatches raise Lua errors (logged, the cast is dropped, later casts still
+run). Behaviour change to expect: a script passing `nil` for a number now
+errors instead of silently becoming 0. `SOL_SAFE_NUMERICS` stays off.
+`tests/lua_type_filter_test.cpp` is built like Release and fails with the old
+defines on exactly the number-as-table case.
+
+**Correction to the binding audit.** The earlier audit missed definitions made
+with constant bracket keys (`t["Name"] = value`), which is how
+`GlobalDefinitions.lua` builds its enum tables. Engine enums such as
+`nAttributeType`, `nModifierPriorities`, `nDebuffDescriptors` are defined by
+the game's own scripts with the engine's values; nothing needs inventing.
+Corrected totals: 134 members / 319 call sites not provided. Engine functions
+among them: `nBehaviorTree.GetMyObjectID` (61), `nAgent.GetBestTarget` (40),
+`nLocomotion.FindBallRollPosition` (15), `GetClosestSpawnPosition` (11),
+`IsPositionReachable` (10), `DistanceToObstacle` (7), `GetTerrainHeight` (5),
+`FindGoodMeleePosition` (3), `nTimeManager.GetSimTimeDt` (8),
+`nAgent.HasTargetsOnAggroList`/`GetTargetsOnAggroList` (11), `nTuning.*`,
+`nAffix.*`. The rest are optional script fields that are nil by design.
+
+**Attribute numbering differs from build 103 (not fixed yet).** The game's
+`nAttributeType` (115 entries, executed with LuaJIT) and the server's
+`AttributeType` enum agree for 0-73 and differ for 39 attributes from 74 on:
+the game has `ImmuneToShocked` 74 (unnamed in Lua), `ImmuneToSleep` 75,
+`ImmuneToTaunted` 76, `ImmuneToTerrified` 77, ...; the server has
+`ImmuneToSleep` 74 and moves `ImmuneToShocked`/`ImmuneToTaunted` after
+`ClientCount`. The attribute-name table in the 5.3.0.103 `Darkspore.exe`
+(read in order: ..., Surefooted, ImmuneToStunned, ImmuneToShocked,
+ImmuneToSleep, ImmuneToTaunted, ImmuneToTerrified, ...) matches the game
+scripts. Effect: scripts and `AttributeDataUpdate` packets address the wrong
+attribute for indices 74-111 (immunities, DoT/aggro modifiers); 0-73 (health,
+mana, damage, crit, speed, `AoERadius` 62) are unaffected. The server enum may
+be correct for 5.3.0.127, so this needs a version-aware fix with its own tests
+rather than a reorder. Next slice after combat is confirmed on screen.
