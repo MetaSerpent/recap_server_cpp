@@ -341,3 +341,31 @@ No damage, kills or objective updates happened. Two combat blockers:
 
 Casts that still fail now log once per run why (no ability id for a hero slot,
 or no registered script for an ability id).
+
+### Fourth client session on `05ef33e` (2026-11-10): abilities execute
+
+Hero casts now resolve and run Lua: the basic attack executed
+`template_ability_melee`. Failures observed, fixed in the next commit:
+
+- Every melee hit called `nAbility.DebugDrawDamageArc` → unbound
+  `nDebug.IsAbilityDebugEnabled` → Lua error. Added server-side stubs whose
+  semantics are unambiguous (debug drawing disabled, `nClient` reticles no-op,
+  `GetMyPlayerObjectId` 0, `nScenarioManager.GetIsClient` false).
+- After any script error the pooled Lua thread stayed in the error state and
+  every later cast failed with "cannot resume non-suspended coroutine".
+  `ReturnThreadToPool` now replaces errored threads
+  (`tests/lua_thread_recovery_test.cpp` reproduces both on LuaJIT).
+- `modifier_timeravager_basic` (and 6 others) use `AttributeUtils` globals
+  without requiring the module; 1 script does the same with
+  `NavigationUtils`. Both are preloaded in each game Lua state.
+
+Static binding audit (members used by the 1,029 scripts but neither bound by
+the server nor defined by scripts): 218 members / 856 call sites overall; for
+the session's heroes' ability closure 27 / 36, mostly `nLocomotion` path
+queries (`GetClosestSpawnPosition`, `IsPositionReachable`,
+`FindBallRollPosition`, `FindGoodMeleePosition`, `DistanceToObstacle`),
+`nTimeManager.GetSimTimeDt`, and engine enum values (`nAttributeType.AoERadius`,
+`nModifierPriorities.*`, `nDebuffDescriptors.*`, `nAbilityPrimaryStat.*`,
+`nAllowsMovement.Always`, `nProjectileFlags.kHoming`). Enum values must come
+from the original engine (e.g. the client's own Lua registration), not be
+invented.

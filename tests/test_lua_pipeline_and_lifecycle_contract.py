@@ -57,6 +57,23 @@ class LuaPipelineAndLifecycleContracts(unittest.TestCase):
         self.assertIn("case 0: return CreatureAbility(creature, 0);", player)
         self.assertIn("return CreatureAbility(creature, 2);", player)
 
+    def test_errored_lua_threads_are_replaced_before_reuse(self):
+        pool = LUA_CPP[LUA_CPP.index("void Lua::ReturnThreadToPool("):]
+        pool = pool[:pool.index("constexpr size_t MAX_LUA_THREADS")]
+        self.assertIn("LuaThreadNeedsReset(lua_status(thread->lua_state()))", pool)
+        self.assertIn("thread->stop();", pool)
+        self.assertIn("mThreads.emplace(thread->lua_state(), thread);", pool)
+
+    def test_server_side_debug_and_client_stubs(self):
+        for member in ('debug["IsAbilityDebugEnabled"]', 'debug["LogToConsole"]', 'client["GetMyPlayerObjectId"]',
+                       'mState["nScenarioManager"]["GetIsClient"]'):
+            self.assertIn(member, LUA_FN)
+
+    def test_unrequired_helper_modules_are_preloaded(self):
+        init = LUA_CPP[LUA_CPP.index("void Lua::Initialize()"):]
+        init = init[:init.index("void Lua::Reload()")]
+        self.assertIn('"Lua!AttributeUtils.lua", "Lua!NavigationUtils.lua"', init)
+
     def test_redistributable_fixture_is_executed_in_ci(self):
         workflow = (ROOT.parents[1] / ".github/workflows/gameplay-guardrails.yml").read_text(encoding="utf-8")
         self.assertIn("tests/lua51_transpiler_test.cpp", workflow)

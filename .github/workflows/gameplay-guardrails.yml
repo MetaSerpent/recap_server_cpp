@@ -84,6 +84,8 @@ jobs:
           git clone -q --depth 1 --branch v3.3.1 https://github.com/ThePhD/sol2.git /tmp/sol2
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic -DSOL_LUAJIT=1 -DSOL_SAFE_FUNCTION=1 -DSOL_EXCEPTIONS_SAFE_PROPAGATION=1             -isystem /tmp/sol2/include -isystem /tmp/luajit/src tests/ability_registration_test.cpp /tmp/luajit/src/libluajit.a -ldl -lm             -o /tmp/ability_registration_test
           /tmp/ability_registration_test
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic -DSOL_LUAJIT=1 -DSOL_SAFE_FUNCTION=1 -DSOL_EXCEPTIONS_SAFE_PROPAGATION=1             -isystem /tmp/sol2/include -isystem /tmp/luajit/src tests/lua_thread_recovery_test.cpp /tmp/luajit/src/libluajit.a -ldl -lm             -o /tmp/lua_thread_recovery_test
+          /tmp/lua_thread_recovery_test
       - name: Squads reference owned creatures, not templates
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/squad_repair_test.cpp -o /tmp/squad_repair_test

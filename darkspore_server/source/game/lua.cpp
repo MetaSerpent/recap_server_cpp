@@ -2,6 +2,7 @@
 // Include
 #include "lua.h"
 #include "lua51_transpiler.h"
+#include "lua_thread_state.h"
 
 #include "instance.h"
 #include "objectmanager.h"
@@ -1985,6 +1986,16 @@ end
 		RegisterFunctions();
 
 		LoadFile("data/serverdata/lua/global.lua");
+
+		// Helper modules some game scripts use without requiring them (the
+		// original engine had them loaded already): AttributeUtils
+		// (CreateStackingAttributeFunctions, ...) and NavigationUtils.
+		LoadBuffer(R"(
+for _, module in ipairs({ "Lua!AttributeUtils.lua", "Lua!NavigationUtils.lua" }) do
+	local ok, err = pcall(require, module)
+	if not ok then print("Lua preload failed for " .. module .. ": " .. tostring(err)) end
+end
+)");
 	}
 
 	void Lua::Reload() {
@@ -2111,6 +2122,16 @@ end
 		thread->mOwnerObject = nullptr;
 		thread->mResumeCondition = nullptr;
 		lua_settop(thread->lua_state(), 0);
+
+		// A coroutine that raised an error leaves its Lua thread in an error
+		// state, and LuaJIT refuses to run anything on it again ("cannot resume
+		// non-suspended coroutine"). One failed cast then blocked every later
+		// cast reusing this pooled thread. Give it a fresh Lua thread.
+		if (LuaThreadNeedsReset(lua_status(thread->lua_state()))) {
+			mThreads.erase(thread->lua_state());
+			thread->stop();
+			mThreads.emplace(thread->lua_state(), thread);
+		}
 
 		constexpr size_t MAX_LUA_THREADS = 256;
 		if (mThreads.size() > MAX_LUA_THREADS) {

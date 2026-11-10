@@ -1416,6 +1416,8 @@ namespace Game {
 				mState.create_named_table(tableName);
 			}
 		}
+		// Scripts branch on this to skip client-only work.
+		mState["nScenarioManager"]["GetIsClient"] = [](sol::variadic_args) { return false; };
 		mState["nModifier"]["PreloadAsset"] = [](sol::variadic_args) {};
 		mState["nModifier"]["RegisterModifier"] = [](sol::variadic_args) {};
 		mState["nCondition"]["RegisterCondition"] = [](sol::variadic_args) {};
@@ -1468,6 +1470,13 @@ namespace Game {
 
 	void LuaBase::RegisterClient() {
 		auto client = mState.create_named_table("nClient");
+		// The server has no local player or HUD: client-only queries return
+		// "none" and targeting reticles draw nothing.
+		client["GetMyPlayerObjectId"] = [](sol::variadic_args) { return 0u; };
+		client["GetPlayerObjectAttribute"] = [](sol::variadic_args) { return 0.f; };
+		client["DrawReticle_Circle"] = [](sol::variadic_args) {};
+		client["DrawReticle_PointBlankCircle"] = [](sol::variadic_args) {};
+		client["DrawReticle_Cone"] = [](sol::variadic_args) {};
 		client["CreateClientEvent"] = [this](uint32_t eventType) {
 			sol::table ev = mState.create_table();
 			ev["eventType"] = eventType;
@@ -1526,6 +1535,17 @@ namespace Game {
 		debug["DrawBox"] = [](sol::variadic_args) {};
 		debug["DrawArc"] = [](sol::variadic_args) {};
 		debug["Print"] = [](sol::variadic_args) {};
+		// Server-side: debug visualisation is never enabled and draws nothing.
+		// IsAbilityDebugEnabled is called by every melee hit (DebugDrawDamageArc).
+		debug["IsAbilityDebugEnabled"] = [](sol::variadic_args) { return false; };
+		debug["LogToConsole"] = [](sol::variadic_args) {};
+		debug["SetColor"] = [](sol::variadic_args) {};
+		debug["SetAlpha"] = [](sol::variadic_args) {};
+		debug["SetDepthEnabled"] = [](sol::variadic_args) {};
+		debug["Assert"] = [](sol::variadic_args) {};
+		debug["DrawAxis"] = [](sol::variadic_args) {};
+		debug["DrawOrientedBox"] = [](sol::variadic_args) {};
+		debug["FillArc"] = [](sol::variadic_args) {};
 	}
 
 	void LuaBase::RegisterNPCType() {
