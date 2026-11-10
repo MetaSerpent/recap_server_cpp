@@ -369,3 +369,32 @@ queries (`GetClosestSpawnPosition`, `IsPositionReachable`,
 `nAllowsMovement.Always`, `nProjectileFlags.kHoming`). Enum values must come
 from the original engine (e.g. the client's own Lua registration), not be
 invented.
+
+### Fifth client session on `e1bf517` (2026-11-10): server crash on melee hit
+
+Abilities ran without Lua errors and three basic attacks completed the server
+pipeline (`=== End UseCharacterAbility ===`), then the server crashed
+(`0xc0000005`, Windows Error Reporting dump, not committed). Analysis of the
+dump without symbols: faulting instruction in `Attributes::GetValue`, called
+from `Object::TakeDamage` with `this->mAttributes` holding garbage
+(`0x8000046f8a135d34`), called from the `nGameObject.TakeDamage` binding
+inside a resumed ability coroutine (`LuaThread::resume`).
+
+Root cause: the binding's argument order did not match the game. All 1,029
+scripts call `TakeDamage(snapshot, target, damage, damageType, damageSource,
+coefficient, descriptors[, multiplier[, dirX, dirY, dirZ]])` (first argument
+traced to `Get*AttributeSnapshot` in ~104 of ~124 calls, `kInvalidGUID`
+otherwise; 128 calls use 7 arguments, 10 use 11) and
+`HealDamage(snapshot, target, heal, coefficient[, descriptors[, critical[,
+canResurrect]]])`. The bindings expected `(object, attacker, snapshot, ...)`,
+so a number reached a `sol::table` parameter that is then read with
+`raw_get`: LuaJIT reinterprets the number as a table pointer (undefined
+behaviour, memory corruption). The exact path from that read to the garbage
+`this` cannot be proven from a symbol-less dump; the mismatch itself is
+proven. Note: lines 86-1618 of `lua.cpp` (a duplicate `LuaFunction` set) are
+compiled out (`#ifdef UNUSED_STUFF`).
+
+Fix (implemented, unit-tested in sol2 + LuaJIT, needs client rerun):
+`game/combat_call.h` parses both calls in the game order with every argument
+type-checked; the attacker is the snapshot's owner object. Release builds now
+produce and ship `recap_server.pdb` so future dumps resolve to source lines.

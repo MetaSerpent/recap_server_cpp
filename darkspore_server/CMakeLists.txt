@@ -50,7 +50,10 @@ if(MSVC)
     # Lua bindings generate more than the normal COFF section limit in Release.
     # /bigobj must apply to every MSVC configuration, not just Debug.
     target_compile_options(recap_server PRIVATE /bigobj)
-    set_target_properties(recap_server PROPERTIES LINK_FLAGS "/SUBSYSTEM:CONSOLE /INCREMENTAL:NO /Brepro")
+    # Ship a PDB with Release builds so crash dumps from players resolve to
+    # functions and lines; /OPT:REF /OPT:ICF keep Release optimisations.
+    target_compile_options(recap_server PRIVATE $<$<CONFIG:Release>:/Zi>)
+    set_target_properties(recap_server PROPERTIES LINK_FLAGS "/SUBSYSTEM:CONSOLE /INCREMENTAL:NO /Brepro /DEBUG /OPT:REF /OPT:ICF")
     set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 endif()
 
@@ -242,6 +245,12 @@ install(TARGETS recap_server
         DESTINATION ${CMAKE_INSTALL_BINDIR}
     COMPONENT
         recap_server)
+if(MSVC)
+    install(FILES $<TARGET_PDB_FILE:recap_server>
+        DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT recap_server
+        OPTIONAL)
+endif()
 
 if (UNIX AND NOT APPLE)
     foreach(SIZE 16 32 48 64 128 256)

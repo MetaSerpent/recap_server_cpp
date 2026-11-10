@@ -2,6 +2,7 @@
 // Include
 #include "lua.h"
 #include "ability_registration.h"
+#include "combat_call.h"
 
 #include "instance.h"
 #include "objectmanager.h"
@@ -2091,53 +2092,73 @@ namespace Game {
 			}
 			return true;
 		};
-		gameObject["TakeDamage"] = [this](sol::this_state L,
-			sol::object objectValue,
-			sol::object attackerValue,
-			sol::object attributeSnapshotValue,
-			sol::table damageRange,
-			uint32_t damageType,
-			uint32_t damageSource,
-			float damageCoefficient,
-			uint32_t descriptors,
-			sol::optional<float> damageMultiplier,
-			sol::optional<float> dirX,
-			sol::optional<float> dirY,
-			sol::optional<float> dirZ
-		) {
-			sol::optional<glm::vec3> dir;
-			if (dirX.has_value()) {
-				dir = glm::vec3(dirX.value_or(0.f), dirY.value_or(0.f), dirZ.value_or(0.f));
+		// Game scripts call TakeDamage(snapshot, target, damage, ...) and
+		// HealDamage(snapshot, target, heal, ...); see game/combat_call.h.
+		// The attacker is the snapshot's owner object.
+		const auto snapshotOwner = [](sol::this_state L, const sol::object& snapshot) -> sol::object {
+			if (snapshot.is<Game::AttributesPtr>()) {
+				if (const auto& attributes = snapshot.as<Game::AttributesPtr>()) {
+					if (const auto owner = attributes->GetOwnerObject()) {
+						return sol::make_object(L, owner);
+					}
+				}
+			}
+			return sol::make_object(L, sol::lua_nil);
+		};
+		gameObject["TakeDamage"] = [this, snapshotOwner](sol::this_state L, sol::variadic_args args) {
+			std::string error;
+			const auto call = CombatCall::ParseTakeDamage(args, error);
+			if (!call) {
+				LogError(L, "nGameObject.TakeDamage", error);
+				return std::make_tuple(false, 0.f, false);
+			}
+			sol::state_view state(L);
+			sol::table range = state.create_table_with(1, call->range.min, 2, call->range.max);
+			sol::optional<glm::vec3> direction;
+			if (call->direction) {
+				direction = glm::vec3((*call->direction)[0], (*call->direction)[1], (*call->direction)[2]);
+			}
+			sol::optional<float> multiplier;
+			if (call->multiplier) {
+				multiplier = *call->multiplier;
 			}
 			return LuaFunction::Object::TakeDamage(
 				L,
-				objectValue,
-				attackerValue,
-				attributeSnapshotValue,
-				damageRange,
-				static_cast<Game::DamageType>(damageType),
-				static_cast<Game::DamageSource>(damageSource),
-				damageCoefficient,
-				static_cast<Game::Descriptors>(descriptors),
-				damageMultiplier,
-				dir
+				call->target,
+				snapshotOwner(L, call->snapshot),
+				call->snapshot,
+				range,
+				static_cast<Game::DamageType>(call->damageType),
+				static_cast<Game::DamageSource>(call->damageSource),
+				call->coefficient,
+				static_cast<Game::Descriptors>(call->descriptors),
+				multiplier,
+				direction
 			);
 		};
-		gameObject["HealDamage"] = [this](sol::this_state L,
-			sol::object objectValue,
-			sol::object attackerValue,
-			sol::object attributeSnapshotValue,
-			sol::table healRange,
-			float healCoefficient,
-			sol::optional<uint32_t> descriptors,
-			sol::optional<bool> critical,
-			sol::optional<bool> canResurrect
-		) {
-			sol::optional<Game::Descriptors> desc;
-			if (descriptors.has_value()) {
-				desc = static_cast<Game::Descriptors>(*descriptors);
+		gameObject["HealDamage"] = [this, snapshotOwner](sol::this_state L, sol::variadic_args args) {
+			std::string error;
+			const auto call = CombatCall::ParseHealDamage(args, error);
+			if (!call) {
+				LogError(L, "nGameObject.HealDamage", error);
+				return std::make_tuple(0.f, false);
 			}
-			return LuaFunction::Object::Heal(L, objectValue, attackerValue, attributeSnapshotValue, healRange, healCoefficient, desc, critical, canResurrect);
+			sol::state_view state(L);
+			sol::table range = state.create_table_with(1, call->range.min, 2, call->range.max);
+			sol::optional<Game::Descriptors> descriptors;
+			if (call->descriptors) {
+				descriptors = static_cast<Game::Descriptors>(*call->descriptors);
+			}
+			sol::optional<bool> critical;
+			if (call->critical) {
+				critical = *call->critical;
+			}
+			sol::optional<bool> canResurrect;
+			if (call->canResurrect) {
+				canResurrect = *call->canResurrect;
+			}
+			return LuaFunction::Object::Heal(L, call->target, snapshotOwner(L, call->snapshot), call->snapshot,
+				range, call->coefficient, descriptors, critical, canResurrect);
 		};
 		gameObject["FullHealObject"] = [this](sol::object objVal) {
 			if (auto obj = LuaGetObject(mGame.GetObjectManager(), objVal)) {

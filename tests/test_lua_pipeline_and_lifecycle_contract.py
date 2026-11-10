@@ -74,6 +74,20 @@ class LuaPipelineAndLifecycleContracts(unittest.TestCase):
         init = init[:init.index("void Lua::Reload()")]
         self.assertIn('"Lua!AttributeUtils.lua", "Lua!NavigationUtils.lua"', init)
 
+    def test_damage_and_heal_bindings_use_the_game_argument_order(self):
+        block = LUA_FN[LUA_FN.index('gameObject["TakeDamage"]'):LUA_FN.index('gameObject["FullHealObject"]')]
+        self.assertIn("CombatCall::ParseTakeDamage(args, error)", block)
+        self.assertIn("CombatCall::ParseHealDamage(args, error)", block)
+        # No sol::table parameter may receive an unchecked script value.
+        self.assertNotIn("sol::table damageRange,", block)
+        self.assertNotIn("sol::table healRange,", block)
+
+    def test_release_builds_ship_debug_symbols(self):
+        cmake = (ROOT.parents[0] / "CMakeLists.txt").read_text(encoding="utf-8")
+        self.assertIn("$<$<CONFIG:Release>:/Zi>", cmake)
+        self.assertIn("/DEBUG /OPT:REF /OPT:ICF", cmake)
+        self.assertIn("$<TARGET_PDB_FILE:recap_server>", cmake)
+
     def test_redistributable_fixture_is_executed_in_ci(self):
         workflow = (ROOT.parents[1] / ".github/workflows/gameplay-guardrails.yml").read_text(encoding="utf-8")
         self.assertIn("tests/lua51_transpiler_test.cpp", workflow)
