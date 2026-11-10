@@ -311,3 +311,33 @@ the ids returned by `UnlockCreature`, three creatures per squad;
 an owned creature of that template); `Player::SetSquad` logs squad members
 the account does not own. Logic in `sporenet/squad_repair.h`, tested by
 `tests/squad_repair_test.cpp`.
+
+### Third real-client session on `dec0a4b` (2026-11-09): first playable mission start
+
+Squads were repaired on login, the player deployed with three heroes in 1-1,
+moved around and swapped heroes (14 `PlayerCharacterDeploy`); 59
+`UseCharacterAbility` commands arrived. No crash; the player quit normally.
+No damage, kills or objective updates happened. Two combat blockers:
+
+1. **Every cast was dropped:** all 100 entries of the shipped
+   `creature_templates.json` have ability ids 0, so `Player::GetAbilityId`
+   returned 0 and the handler silently ignored the command. The installed game
+   data has the abilities: hero noun (`PC_LF_Tank_v2.Noun` = Arborus Gamma,
+   id = the template id) → `playerClassData` → `PlayerClass`. Its fields, by
+   name pattern, are `<Hero>Basic`, `<Hero>Active`, `<Hero>Random`/variant,
+   `<Hero>Support` (the field recap_parser labels `basicAbility` is a numeric
+   id that names no script). Template slots now fall back to those fields
+   (basic → Basic, special_1 → Active, special_2/squad → Support, random →
+   variant). Provisional mapping until casts are verified in the client.
+   In the demo data 68 of 100 `<Hero>Basic` scripts do not exist (e.g.
+   `PlasmaSentinelBasic`, `TimeRavagerBasic`); those basic attacks remain
+   unavailable and are logged.
+2. **No game ability could register:** scripts call
+   `nAbility.RegisterAbility("Name", table)` but the binding took the table
+   first (upstream `Ability.Register(table)`), raising "attempt to index a
+   string value" (seen for `ability_firstaggro_*`). The binding now accepts
+   both forms (`game/ability_registration.h`), tested in a real sol2 3.3.1 +
+   LuaJIT state (`tests/ability_registration_test.cpp`).
+
+Casts that still fail now log once per run why (no ability id for a hero slot,
+or no registered script for an ability id).

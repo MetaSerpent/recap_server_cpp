@@ -1,6 +1,7 @@
 
 // Include
 #include "lua.h"
+#include "ability_registration.h"
 
 #include "instance.h"
 #include "objectmanager.h"
@@ -3456,17 +3457,16 @@ namespace Game {
 	}
 
 	void Lua::RegisterAbility() {
-		auto registerAbilityLambda = [this](sol::this_state L, sol::table abilityTable) {
-			if (abilityTable == sol::nil) {
-				LogError(L, "Ability.Register", "ability is nil");
+		// Accepts the game's RegisterAbility("Name", table) and Ability.Register(table).
+		auto registerAbilityLambda = [this](sol::this_state L, sol::variadic_args args) {
+			auto request = AbilityRegistration::Resolve(args);
+			if (!request) {
+				LogError(L, "Ability.Register", "expected (name, ability table) or (ability table)");
 				return;
 			}
 
-			auto nameOption = abilityTable["name"].get<sol::optional<std::string>>();
-			if (!nameOption) {
-				nameOption = abilityTable["mName"].get<sol::optional<std::string>>();
-			}
-			const std::string name = nameOption.value_or("unnamed_ability");
+			sol::table abilityTable = request->table;
+			const std::string name = request->name;
 			const uint32_t id = utils::hash_id(name);
 			abilityTable["id"] = id;
 

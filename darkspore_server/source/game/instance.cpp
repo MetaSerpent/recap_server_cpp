@@ -785,6 +785,12 @@ namespace Game {
 
 		const auto& ability = mLua->GetAbility(combatData.abilityId);
 		if (!ability) {
+			// Report each missing ability script once per server run.
+			static std::unordered_set<uint32_t> reported;
+			if (reported.insert(combatData.abilityId).second) {
+				std::cout << "Ability 0x" << std::hex << combatData.abilityId << std::dec
+				          << ": no registered ability script; cast ignored." << std::endl;
+			}
 			return false;
 		}
 

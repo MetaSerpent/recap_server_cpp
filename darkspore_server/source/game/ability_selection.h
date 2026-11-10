@@ -24,6 +24,25 @@ namespace Game::AbilitySelection {
     constexpr std::uint32_t ResolveHeroForAbility(std::uint32_t currentHero, std::uint32_t abilityIndex) noexcept {
         return IsSquadAbility(abilityIndex) ? abilityIndex - 6 : currentHero;
     }
+
+    // Creature template ability slots used by Player::GetAbilityId:
+    //   0 basic, 1 special_1 (hero's own), 2 special_2 (squad), 3 random, 4 passive.
+    // The installed PlayerClass data lists, in parsed order: 0 a numeric id that
+    // names no ability script, 1 "<Hero>Basic", 2 "<Hero>Active",
+    // 3 "<Hero>Random"/variant, 4 "<Hero>Support" (e.g. PlasmaSentinelBasic,
+    // PlasmaSentinelActive, PlasmaRandom_FireWave, PlasmaSentinelSupport).
+    // Mapping by those names is provisional until verified with client casts.
+    inline constexpr int NoPlayerClassField = -1;
+
+    constexpr int PlayerClassFieldForTemplateSlot(std::uint32_t templateSlot) noexcept {
+        switch (templateSlot) {
+            case 0: return 1;
+            case 1: return 2;
+            case 2: return 4;
+            case 3: return 3;
+            default: return NoPlayerClassField;
+        }
+    }
 }
 
 #endif

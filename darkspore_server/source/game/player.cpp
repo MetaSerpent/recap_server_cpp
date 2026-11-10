@@ -5,6 +5,7 @@
 
 #include "instance.h"
 #include "objectmanager.h"
+#include "noun.h"
 
 #include "sporenet/user.h"
 
@@ -87,6 +88,26 @@ namespace Game {
 		return mCurrentDeckIndex;
 	}
 
+	namespace {
+		// creature_templates.json ships without ability ids (all zero), which
+		// silently dropped every cast. Fall back to the hero's PlayerClass data
+		// from the installed game (noun -> playerClassData).
+		uint32_t CreatureAbility(const SporeNet::CreaturePtr& creature, uint8_t templateSlot) {
+			if (const auto id = creature->GetAbility(templateSlot); id != 0) {
+				return id;
+			}
+			const int field = AbilitySelection::PlayerClassFieldForTemplateSlot(templateSlot);
+			if (field == AbilitySelection::NoPlayerClassField) {
+				return 0;
+			}
+			const auto noun = NounDatabase::Instance().Get(creature->GetNoun());
+			if (!noun || !noun->GetPlayerClassData()) {
+				return 0;
+			}
+			return noun->GetPlayerClassData()->GetAbility(static_cast<PlayerAbility>(field));
+		}
+	}
+
 	uint32_t Player::GetAbilityId(uint8_t creatureIndex, uint8_t abilityIndex) const {
 		if (!mUser || !mSquad || !AbilitySelection::IsValidAbilityIndex(abilityIndex)) {
 			return 0;
@@ -108,9 +129,9 @@ namespace Game {
 				}
 
 				switch (abilityIndex) {
-					case 0: return creature->GetAbility(0);
-					case 2: return creature->GetAbility(1);
-					case 3: return creature->GetAbility(3);
+					case 0: return CreatureAbility(creature, 0);
+					case 2: return CreatureAbility(creature, 1);
+					case 3: return CreatureAbility(creature, 3);
 				}
 
 				break;
@@ -123,7 +144,7 @@ namespace Game {
 				}
 				const auto& creature = mUser->GetCreatureById(creatureIds[abilityIndex - 6]);
 				if (creature) {
-					return creature->GetAbility(2);
+					return CreatureAbility(creature, 2);
 				}
 				break;
 			}

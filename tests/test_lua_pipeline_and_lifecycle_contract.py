@@ -44,6 +44,19 @@ class LuaPipelineAndLifecycleContracts(unittest.TestCase):
         self.assertIn('tempPath += ".transpile.tmp";', transpile_file)
         self.assertIn("std::filesystem::rename(tempPath, outputPath, ec);", transpile_file)
 
+    def test_register_ability_accepts_the_game_call_form(self):
+        register = LUA_FN[LUA_FN.index("void Lua::RegisterAbility()"):]
+        register = register[:register.index('nAbility["RegisterAbility"] = registerAbilityLambda;')]
+        self.assertIn("sol::variadic_args args", register)
+        self.assertIn("AbilityRegistration::Resolve(args)", register)
+        self.assertNotIn("sol::this_state L, sol::table abilityTable)", register)
+
+    def test_hero_abilities_fall_back_to_player_class_data(self):
+        player = (ROOT / "game/player.cpp").read_text(encoding="utf-8")
+        self.assertIn("GetPlayerClassData()->GetAbility(", player)
+        self.assertIn("case 0: return CreatureAbility(creature, 0);", player)
+        self.assertIn("return CreatureAbility(creature, 2);", player)
+
     def test_redistributable_fixture_is_executed_in_ci(self):
         workflow = (ROOT.parents[1] / ".github/workflows/gameplay-guardrails.yml").read_text(encoding="utf-8")
         self.assertIn("tests/lua51_transpiler_test.cpp", workflow)

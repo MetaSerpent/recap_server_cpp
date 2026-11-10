@@ -29,6 +29,7 @@
 #include <time.h>
 #include <iomanip>
 #include <iostream>
+#include <unordered_set>
 #include <algorithm>
 #include <tuple>
 #include <array>
@@ -785,6 +786,12 @@ namespace RakNet {
 						player->GetCurrentDeckIndex(), command.ability.index);
 					combatData.abilityId = player->GetAbilityId(static_cast<uint8_t>(creatureIndex), static_cast<uint8_t>(command.ability.index));
 					if (combatData.abilityId == 0) {
+						// Report each unresolved (hero, ability index) once per server run.
+						static std::unordered_set<uint32_t> reported;
+						if (reported.insert((creatureIndex << 8) | command.ability.index).second) {
+							std::cout << "Ability: hero slot " << creatureIndex << " has no ability for index "
+							          << command.ability.index << "; cast ignored." << std::endl;
+						}
 						break;
 					}
 					combatData.abilityRank = command.ability.rank;

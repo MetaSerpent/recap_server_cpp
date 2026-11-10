@@ -76,6 +76,14 @@ jobs:
           diff -u tests/fixtures/lua51/transpiler_fixture.expected /tmp/transpiler_fixture.out
       - name: Resolve Darkspore Group!name.lua modules with the server require shim
         run: luajit tests/require_shim_test.lua
+      - name: Register game abilities with the server binding (sol2 + LuaJIT)
+        run: |
+          git clone -q https://github.com/LuaJIT/LuaJIT.git /tmp/luajit
+          git -C /tmp/luajit checkout -q ea9eb7edb5eac4a9d175d74523db34fac0fa5180
+          make -s -C /tmp/luajit/src libluajit.a -j4
+          git clone -q --depth 1 --branch v3.3.1 https://github.com/ThePhD/sol2.git /tmp/sol2
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic -DSOL_LUAJIT=1 -DSOL_SAFE_FUNCTION=1 -DSOL_EXCEPTIONS_SAFE_PROPAGATION=1             -isystem /tmp/sol2/include -isystem /tmp/luajit/src tests/ability_registration_test.cpp /tmp/luajit/src/libluajit.a -ldl -lm             -o /tmp/ability_registration_test
+          /tmp/ability_registration_test
       - name: Squads reference owned creatures, not templates
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/squad_repair_test.cpp -o /tmp/squad_repair_test
