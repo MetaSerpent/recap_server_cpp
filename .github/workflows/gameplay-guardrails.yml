@@ -96,6 +96,10 @@ jobs:
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/combat_presentation_test.cpp -o /tmp/combat_presentation_test
           /tmp/combat_presentation_test
+      - name: Build-103 action response layout and team validation
+        run: |
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/action_response_test.cpp -o /tmp/action_response_test
+          /tmp/action_response_test
       - name: Squads reference owned creatures, not templates
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/squad_repair_test.cpp -o /tmp/squad_repair_test

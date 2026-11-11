@@ -7,6 +7,7 @@
 // Include
 #include "predefined.h"
 #include "types.h"
+#include "action_response.h"
 #include "client.h"
 
 #include "game/catalyst.h"
@@ -185,6 +186,7 @@ namespace RakNet {
 			void SendActionCancel(const ClientPtr& client, uint8_t value, uint32_t otherValue);
 
 			void SendActionCommandResponse(const ClientPtr& client, uint8_t type);
+			void SendActionCommandResponse(const ClientPtr& client, const ActionResponse::Message& message);
 			void SendActionCommandResponse(const ClientPtr& client, const AbilityCommandResponse& data);
 			void SendObjectJump(
 				const ClientPtr& client, const Game::ObjectPtr& object, const glm::vec3& destination, const glm::vec3& direction,

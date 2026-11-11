@@ -2474,6 +2474,52 @@ end
 		return animation.get_type() == sol::type::number ? animation.as<uint32_t>() : 0;
 	}
 
+	bool Ability::GetActiveCastTiming(uint32_t& hitMs, uint32_t& releaseMs) const {
+		// A delay is a number, or a table whose first entry (several hits) or
+		// rank entry (per-rank values) is a number.
+		const auto seconds = [this](const sol::object& value) -> float {
+			if (value.get_type() == sol::type::number) {
+				return value.as<float>();
+			}
+			if (value.get_type() == sol::type::table) {
+				const sol::table table = value.as<sol::table>();
+				for (const int key : { mActiveRank, 1 }) {
+					sol::object entry = table.raw_get<sol::object>(key);
+					if (entry.get_type() == sol::type::number) {
+						return entry.as<float>();
+					}
+				}
+			}
+			return -1.f;
+		};
+
+		float hit = -1.f;
+		float release = -1.f;
+		if (sol::object sequenceObject = mSelf["animationSequence"]; sequenceObject.get_type() == sol::type::table) {
+			sol::object entry = sequenceObject.as<sol::table>().raw_get<sol::object>(mActiveSequenceIndex + 1);
+			if (entry.get_type() == sol::type::table) {
+				const sol::table entryTable = entry.as<sol::table>();
+				const sol::object hitValue = entryTable["hit"];
+				const sol::object releaseValue = entryTable["release"];
+				hit = seconds(hitValue);
+				release = seconds(releaseValue);
+			}
+		} else {
+			const sol::object hitValue = mSelf["timetohit"];
+			const sol::object releaseValue = mSelf["timetorelease"];
+			hit = seconds(hitValue);
+			release = seconds(releaseValue);
+		}
+
+		if (release <= 0.f) {
+			return false;
+		}
+		hit = std::clamp(hit, 0.f, release);
+		hitMs = static_cast<uint32_t>(hit * 1000.f);
+		releaseMs = std::max<uint32_t>(1, static_cast<uint32_t>(release * 1000.f));
+		return true;
+	}
+
 	// Objective
 	Objective::Objective(Lua& lua, sol::table&& self) : Coroutine(lua, std::move(self)) {
 		mEnvironment["_OBJECTIVE"] = this;

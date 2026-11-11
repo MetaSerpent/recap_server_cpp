@@ -73,5 +73,44 @@ class BindingCallFormContracts(unittest.TestCase):
         self.assertIn("tests/combat_presentation_test.cpp", workflow)
 
 
+
+class CastResponseContracts(unittest.TestCase):
+    def setUp(self):
+        self.handler = SERVER.split("case ActionCommand::UseCharacterAbility:", 1)[1].split("case ActionCommand::UseSquadAbility:", 1)[0]
+
+    def test_every_refused_cast_is_rejected(self):
+        self.assertIn("const uint8_t syncStamp = command.data.unk[0];", self.handler)
+        self.assertIn("ActionResponse::Reject(syncStamp, command.data.objectId)", self.handler)
+        # invalid index, no ability for the slot, and a refused UseAbility
+        self.assertEqual(self.handler.count("rejectCast();"), 3)
+        for refusal in ("IsValidAbilityIndex(command.ability.index)) {", "cast ignored.", "if (!mGame.UseAbility(object, combatData)) {"):
+            after = self.handler.split(refusal, 1)[1]
+            self.assertLess(after.index("rejectCast();"), after.index("break;"))
+
+    def test_accepted_casts_are_timed_from_ability_data_and_released(self):
+        self.assertIn("ability->GetActiveCastTiming(hitMs, releaseMs)", self.handler)
+        self.assertIn("ActionResponse::Type::Accepted, syncStamp, combatData.abilityId", self.handler)
+        self.assertIn("released.type = ActionResponse::Type::Released;", self.handler)
+        self.assertIn("mGame.AddTask(releaseMs,", self.handler)
+        self.assertIn("std::weak_ptr<Client> weakClient = client;", self.handler)
+        # the disabled upstream packet must not come back
+        self.assertNotIn("//SendActionCommandResponse(client, actionResponse);", self.handler)
+
+    def test_timing_reads_the_sequence_entry(self):
+        timing = LUA_CPP.split("bool Ability::GetActiveCastTiming(", 1)[1].split("// Objective", 1)[0]
+        self.assertIn('entryTable["hit"]', timing)
+        self.assertIn('entryTable["release"]', timing)
+        self.assertIn('mSelf["timetorelease"]', timing)
+        self.assertIn("if (release <= 0.f) {", timing)
+
+
+class TargetValidationContracts(unittest.TestCase):
+    def test_first_argument_is_a_team_number(self):
+        block = LUA_FN.split("const auto casterTeam = ", 1)[1].split("// Game scripts call TakeDamage", 1)[0]
+        self.assertIn("if (value.get_type() == sol::type::number) {", block)
+        self.assertIn("TeamValidation::IsHostile(casterTeam(teamOrAgent), target->GetTeam())", block)
+        self.assertIn("TeamValidation::IsFriendly(casterTeam(teamOrAgent), target->GetTeam())", block)
+
+
 if __name__ == "__main__":
     unittest.main()

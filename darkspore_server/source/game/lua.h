@@ -294,6 +294,9 @@ namespace Game {
 			// (see game/animation_sequence.h) and its animation state id.
 			uint32_t GetActiveSequenceIndex() const { return mActiveSequenceIndex; }
 			uint32_t GetActiveSequenceAnimation() const;
+			// Hit and release delays (milliseconds) of the current cast, from
+			// animationSequence[index].hit/.release or timetohit/timetorelease.
+			bool GetActiveCastTiming(uint32_t& hitMs, uint32_t& releaseMs) const;
 
 			void PayCooldownAndMana() const;
 

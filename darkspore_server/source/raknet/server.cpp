@@ -771,10 +771,17 @@ namespace RakNet {
 					std::cout << "=== Start UseCharacterAbility ===" << std::endl;
 					
 					Read<ActionCommandAbilityData>(mInStream, command.ability);
+					// The client waits for an answer to every cast: tell it when the
+					// cast is refused, echoing the command's sync stamp (unk[0]).
+					const uint8_t syncStamp = command.data.unk[0];
+					const auto rejectCast = [&]() {
+						SendActionCommandResponse(client, ActionResponse::Reject(syncStamp, command.data.objectId));
+					};
 					if (!Game::AbilitySelection::IsValidAbilityIndex(command.ability.index)) {
+						rejectCast();
 						break;
 					}
-					
+
 					std::cout << "Target ID: " << command.ability.targetId << std::endl;
 					std::cout << "Ability Index: " << command.ability.index << std::endl;
 
@@ -792,6 +799,7 @@ namespace RakNet {
 							std::cout << "Ability: hero slot " << creatureIndex << " has no ability for index "
 							          << command.ability.index << "; cast ignored." << std::endl;
 						}
+						rejectCast();
 						break;
 					}
 					combatData.abilityRank = command.ability.rank;
@@ -800,19 +808,49 @@ namespace RakNet {
 					combatData.valueFromActionResponse = command.ability.userData;
 
 					if (!mGame.UseAbility(object, combatData)) {
+						rejectCast();
 						break;
 					}
 
-					auto targetObject = mGame.GetObjectManager().Get(command.ability.targetId);
-					if (targetObject) {
-						//AbilityCommandResponse actionResponse;
-						//actionResponse.abilityId = combatData.abilityId;
-						//actionResponse.cooldown = 0;
-						//actionResponse.timeImmobilized = 0;
-						//actionResponse.userData = command.ability.userData;
-						//SendActionCommandResponse(client, actionResponse);
+					// Accepted now, Released when the animation's release time is
+					// reached. Timing comes from the ability's own data; without it
+					// no response can be built (see raknet/action_response.h).
+					uint32_t hitMs = 0;
+					uint32_t releaseMs = 0;
+					const auto& ability = mGame.GetLua().GetAbility(combatData.abilityId);
+					ActionResponse::Message accepted;
+					if (ability && ability->GetActiveCastTiming(hitMs, releaseMs) &&
+						ActionResponse::Timed(accepted, ActionResponse::Type::Accepted, syncStamp, combatData.abilityId,
+							command.ability.index, mGame.GetTime(), hitMs, releaseMs)) {
+						SendActionCommandResponse(client, accepted);
+
+						ActionResponse::Message released = accepted;
+						released.type = ActionResponse::Type::Released;
+						std::weak_ptr<Client> weakClient = client;
+						mGame.AddTask(releaseMs, [this, weakClient, released](uint32_t taskId) {
+							mGame.AddServerTask([this, taskId, weakClient, released]() {
+								mGame.CancelTask(taskId);
+								const auto target = weakClient.lock();
+								if (!target) {
+									return;
+								}
+								// Only while that client is still connected to this game.
+								for (const auto& [_, connected] : GetClients()) {
+									if (connected == target) {
+										SendActionCommandResponse(target, released);
+										break;
+									}
+								}
+							});
+						});
+					} else {
+						static std::unordered_set<uint32_t> reported;
+						if (reported.insert(combatData.abilityId).second) {
+							std::cout << "Ability 0x" << std::hex << combatData.abilityId << std::dec
+							          << ": no hit/release timing in its data; no cast response sent." << std::endl;
+						}
 					}
-					
+
 					std::cout << "=== End UseCharacterAbility ===" << std::endl;
 					break;
 			}
@@ -1595,6 +1633,15 @@ namespace RakNet {
 				break;
 		}
 
+		Send(outStream, client);
+	}
+
+	void Server::SendActionCommandResponse(const ClientPtr& client, const ActionResponse::Message& message) {
+		BitStream outStream(57);
+		outStream.Write(PacketID::ActionCommandResponse);
+		for (const auto byte : ActionResponse::Encode(message)) {
+			Write<uint8_t>(outStream, byte);
+		}
 		Send(outStream, client);
 	}
 

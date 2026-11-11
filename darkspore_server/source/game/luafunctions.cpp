@@ -4,6 +4,7 @@
 #include "ability_registration.h"
 #include "combat_call.h"
 #include "lua_type_filter.h"
+#include "team_validation.h"
 
 #include "instance.h"
 #include "objectmanager.h"
@@ -2086,30 +2087,35 @@ namespace Game {
 				obj->GetLocomotionData()->SetTargetPosition(glm::vec3(x, y, z));
 			}
 		};
-		gameObject["ValidateHostileTarget"] = [this](sol::object agentVal, sol::object targetVal, sol::variadic_args) -> bool {
-			auto agent = LuaGetObject(mGame.GetObjectManager(), agentVal);
+		// First argument: the caster's team number (game scripts, from
+		// nGameObject.GetTeam) or a caster object. A number is never an object id here.
+		const auto casterTeam = [this](sol::object value) -> uint32_t {
+			if (value.get_type() == sol::type::number) {
+				return value.as<uint32_t>();
+			}
+			if (auto caster = LuaGetObject(mGame.GetObjectManager(), value)) {
+				return caster->GetTeam();
+			}
+			return 0u;
+		};
+		gameObject["ValidateHostileTarget"] = [this, casterTeam](sol::object teamOrAgent, sol::object targetVal, sol::variadic_args) -> bool {
 			auto target = LuaGetObject(mGame.GetObjectManager(), targetVal);
 			if (!target || target->IsMarkedForDeletion() || !target->HasCombatantData() || target->GetHealth() <= 0.f || !target->IsTargetable()) {
 				return false;
 			}
-			if (agent && agent == target) {
-				return false;
+			if (teamOrAgent.get_type() != sol::type::number) {
+				if (auto agent = LuaGetObject(mGame.GetObjectManager(), teamOrAgent); agent && agent == target) {
+					return false;
+				}
 			}
-			if (agent && agent->GetTeam() != 0 && target->GetTeam() != 0 && agent->GetTeam() == target->GetTeam()) {
-				return false;
-			}
-			return true;
+			return TeamValidation::IsHostile(casterTeam(teamOrAgent), target->GetTeam());
 		};
-		gameObject["ValidateFriendlyTarget"] = [this](sol::object agentVal, sol::object targetVal, sol::variadic_args) -> bool {
-			auto agent = LuaGetObject(mGame.GetObjectManager(), agentVal);
+		gameObject["ValidateFriendlyTarget"] = [this, casterTeam](sol::object teamOrAgent, sol::object targetVal, sol::variadic_args) -> bool {
 			auto target = LuaGetObject(mGame.GetObjectManager(), targetVal);
 			if (!target || target->IsMarkedForDeletion() || !target->HasCombatantData() || target->GetHealth() <= 0.f) {
 				return false;
 			}
-			if (agent && agent->GetTeam() != 0 && target->GetTeam() != 0) {
-				return agent->GetTeam() == target->GetTeam();
-			}
-			return true;
+			return TeamValidation::IsFriendly(casterTeam(teamOrAgent), target->GetTeam());
 		};
 		// Game scripts call TakeDamage(snapshot, target, damage, ...) and
 		// HealDamage(snapshot, target, heal, ...); see game/combat_call.h.

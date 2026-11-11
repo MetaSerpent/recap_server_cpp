@@ -508,3 +508,29 @@ own data: `animationSequence[i].hit` / `.release` (or `timetohit` /
 `timetorelease`). Implement as: encoder in a tested header, Accepted after a
 successful `UseAbility`, Rejected otherwise, Released scheduled at `release`.
 Crash risk exists (upstream's attempt crashed); keep it isolated in one commit.
+
+### Eighth client session on `2b1d1ee` (2026-11-11): animations and hits
+
+Server log: 174 casts, 74 accepted, 79 `SetAnimationState`, 44 `CombatEvent`,
+2 deaths, the first `ObjectiveUpdate`, no Lua errors, no client or server
+crash. What the player saw is not reported yet. 100 casts were refused with
+no answer to the client, and many accepted attacks animated without damage.
+
+Fixed in the following commit (implemented, unit/contract-tested; client
+effect not verified):
+
+- **Target validation used the wrong argument.** Scripts call
+  `nGameObject.ValidateHostileTarget(team, target)` (160 of 175 calls pass the
+  result of `GetTeam`; `ValidateFriendlyTarget`: 48 of 49). The binding looked
+  up an *object* whose id equals the team number and compared against that
+  object's team. A number is now a team (`game/team_validation.h`).
+- **Cast responses** (design in the previous entry): `raknet/action_response.h`
+  encodes the 56-byte build-103 payload (byte-exact tests). The hero ability
+  handler sends Rejected on every refusal, Accepted with
+  commit = start + hit and end = start + release, and schedules Released at
+  the release time. `Ability::GetActiveCastTiming` reads
+  `animationSequence[i].hit/.release`, else `timetohit`/`timetorelease`;
+  abilities without timing get no response and are logged once. Times are
+  not scaled by attack speed yet. The squad-ability path still uses the old
+  upstream layout. **Crash risk:** upstream's version of this packet crashed
+  the client; if a crash follows a cast, this commit is the first suspect.
