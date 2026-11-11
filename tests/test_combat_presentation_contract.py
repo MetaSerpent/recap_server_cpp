@@ -112,5 +112,18 @@ class TargetValidationContracts(unittest.TestCase):
         self.assertIn("TeamValidation::IsFriendly(casterTeam(teamOrAgent), target->GetTeam())", block)
 
 
+
+class PreloadAndCompatContracts(unittest.TestCase):
+    def test_preload_asset_and_modifier_return_ids(self):
+        # 1,016 PreloadAsset and 251 PreloadModifier call sites store the result
+        # (effect / modifier ids); nil broke AddEffect and modifier requests.
+        self.assertNotIn('["PreloadAsset"] = [](sol::variadic_args) {};', LUA_FN)
+        self.assertNotIn('["PreloadModifier"] = [](sol::variadic_args) {};', LUA_FN)
+        self.assertEqual(LUA_FN.count("LuaExtractAssetOrGuid(sol::object(args[0]), 0)"), 7)
+
+    def test_lua51_math_mod_alias_for_luajit(self):
+        self.assertIn("if math.mod == nil then math.mod = math.fmod end", LUA_CPP)
+
+
 if __name__ == "__main__":
     unittest.main()

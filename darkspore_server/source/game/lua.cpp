@@ -1699,6 +1699,8 @@ namespace Game {
 
 		// set package path and normalize require paths from Darkspore scripts
 		LoadBuffer(R"(
+-- Lua 5.1 compatibility kept by stock Lua (LUA_COMPAT_MOD) but absent in LuaJIT.
+if math.mod == nil then math.mod = math.fmod end
 package.path = package.path .. ";./data/serverdata/lua/?.lua;./data/serverdata/Abilities/?.lua;./data/serverdata/Modifiers/?.lua;./data/serverdata/behaviors/?.lua"
 do
 	local _raw_require = require

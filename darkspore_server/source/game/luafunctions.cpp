@@ -1423,10 +1423,16 @@ namespace Game {
 		}
 		// Scripts branch on this to skip client-only work.
 		mState["nScenarioManager"]["GetIsClient"] = [](sol::variadic_args) { return false; };
-		mState["nModifier"]["PreloadAsset"] = [](sol::variadic_args) {};
+		mState["nModifier"]["PreloadAsset"] = [](sol::variadic_args args) -> uint32_t {
+			// Asset/modifier id: the resource hash of the name (a number passes through).
+			return args.size() > 0 ? LuaExtractAssetOrGuid(sol::object(args[0]), 0) : 0u;
+		};
 		mState["nModifier"]["RegisterModifier"] = [](sol::variadic_args) {};
 		mState["nCondition"]["RegisterCondition"] = [](sol::variadic_args) {};
-		mState["nAffix"]["PreloadModifier"] = [](sol::variadic_args) {};
+		mState["nAffix"]["PreloadModifier"] = [](sol::variadic_args args) -> uint32_t {
+			// Asset/modifier id: the resource hash of the name (a number passes through).
+			return args.size() > 0 ? LuaExtractAssetOrGuid(sol::object(args[0]), 0) : 0u;
+		};
 		mState["nAffix"]["RegisterAffix"] = [](sol::variadic_args) {};
 		mState["nPopupTip"]["RegisterPopupTip"] = [](sol::variadic_args) {};
 	}
@@ -1509,8 +1515,14 @@ namespace Game {
 			}
 			return 0u;
 		};
-		ability["PreloadAsset"] = [](sol::variadic_args) {};
-		ability["PreloadModifier"] = [](sol::variadic_args) {};
+		ability["PreloadAsset"] = [](sol::variadic_args args) -> uint32_t {
+			// Asset/modifier id: the resource hash of the name (a number passes through).
+			return args.size() > 0 ? LuaExtractAssetOrGuid(sol::object(args[0]), 0) : 0u;
+		};
+		ability["PreloadModifier"] = [](sol::variadic_args args) -> uint32_t {
+			// Asset/modifier id: the resource hash of the name (a number passes through).
+			return args.size() > 0 ? LuaExtractAssetOrGuid(sol::object(args[0]), 0) : 0u;
+		};
 		ability["RegisterAbility"] = [](sol::variadic_args) {};
 	}
 
@@ -2638,7 +2650,10 @@ namespace Game {
 		// nModifier
 		{
 			auto nModifier = mState["nModifier"].get_or_create<sol::table>();
-			nModifier["PreloadAsset"] = [](sol::variadic_args) {};
+			nModifier["PreloadAsset"] = [](sol::variadic_args args) -> uint32_t {
+			// Asset/modifier id: the resource hash of the name (a number passes through).
+			return args.size() > 0 ? LuaExtractAssetOrGuid(sol::object(args[0]), 0) : 0u;
+		};
 			nModifier["RegisterModifier"] = [](sol::variadic_args) {};
 			nModifier["RequestModifier"] = [](sol::variadic_args) { return 0u; };
 			nModifier["MarkForDelete"] = [](sol::variadic_args) {};
@@ -3625,8 +3640,14 @@ namespace Game {
 			}
 			return 0u;
 		};
-		nAbility["PreloadAsset"] = [](sol::variadic_args) {};
-		nAbility["PreloadModifier"] = [](sol::variadic_args) {};
+		nAbility["PreloadAsset"] = [](sol::variadic_args args) -> uint32_t {
+			// Asset/modifier id: the resource hash of the name (a number passes through).
+			return args.size() > 0 ? LuaExtractAssetOrGuid(sol::object(args[0]), 0) : 0u;
+		};
+		nAbility["PreloadModifier"] = [](sol::variadic_args args) -> uint32_t {
+			// Asset/modifier id: the resource hash of the name (a number passes through).
+			return args.size() > 0 ? LuaExtractAssetOrGuid(sol::object(args[0]), 0) : 0u;
+		};
 		nAbility["RegisterAbility"] = registerAbilityLambda;
 
 		nAbility["GetAgentID"] = [this](sol::this_state L, sol::variadic_args) -> uint32_t {
