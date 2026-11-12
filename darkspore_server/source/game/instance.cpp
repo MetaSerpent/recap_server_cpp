@@ -720,6 +720,7 @@ namespace Game {
 
 		if (auto delta = (newGameTime - mGameTimeLua); delta >= 1) {
 			mGameTimeLua = newGameTime;
+			mLuaFrameSeconds = static_cast<float>(delta) / 1000.f;
 			mLua->Update();
 		}
 

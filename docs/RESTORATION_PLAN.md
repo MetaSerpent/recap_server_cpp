@@ -534,3 +534,29 @@ effect not verified):
   not scaled by attack speed yet. The squad-ability path still uses the old
   upstream layout. **Crash risk:** upstream's version of this packet crashed
   the client; if a crash follows a cast, this commit is the first suspect.
+
+### Ninth client session on `32938fd` (2026-11-12): cast responses are stable
+
+621 casts, 911 `ActionCommandResponse` packets (accepted / released /
+rejected), 350 animations, 250 hits, 10 kills, 1 objective update; no client
+or server crash over a long session. The build-103 response layout therefore
+does not reproduce the crash that made upstream disable it (`08d2633`).
+Refused casts alternate with accepted ones while a basic attack is held: the
+client re-sends the attack during the swing and the hero's script is busy.
+darkspin queues a repeat at max(cooldown, release); not implemented yet.
+
+Remaining errors were fixed in `4814f1e` (deployed after this session):
+`PreloadAsset`/`PreloadModifier` returned nil (effect/modifier ids used by
+1,267 call sites), and `math.mod`, a Lua 5.1 compatibility alias that LuaJIT
+lacks. That commit broke the require-shim guardrail (the compatibility line
+was inserted above the `package.path` marker the test anchors on); moved.
+
+Also fixed after this session:
+- **Kills were rare (about 25 hits per kill).** Every hero's weapon damage was
+  hard-coded to 1-5 (`object.cpp`). The class data defines it for all 100
+  hero classes (Arborus 6-12, Zrin 9-14, Vex 4-8) and the server already parsed
+  it; now used (`game/hero_stats.h`). Enemy health and difficulty scaling are
+  not yet checked against the game data.
+- `nTimeManager.GetSimTimeDt` returned nothing; projectile, nova and several
+  modifier scripts loop `elapsed += GetSimTimeDt(); coroutine.yield()`. It now
+  returns the duration of the current Lua update in seconds.

@@ -146,6 +146,8 @@ namespace Game {
 			uint32_t GetId() const;
 			uint64_t GetTime() const;
 			uint64_t GetTimeElapsed() const;
+			// Time covered by the current Lua update (nTimeManager.GetSimTimeDt).
+			float GetLuaFrameSeconds() const { return mLuaFrameSeconds; }
 
 			ObjectManager& GetObjectManager();
 			const ObjectManager& GetObjectManager() const;
@@ -262,6 +264,7 @@ namespace Game {
 			uint64_t mGameStartTime = 0;
 			uint64_t mGameTime = 0;
 			uint64_t mGameTimeLua = 0;
+			float mLuaFrameSeconds = 0.f;
 
 			Level mLevel {};
 

@@ -7,6 +7,7 @@
 #include "objectmanager.h"
 #include "instance.h"
 #include "catalyst.h"
+#include "hero_stats.h"
 
 #include "sporenet/part.h"
 
@@ -702,7 +703,9 @@ namespace Game {
 					SetAttributeValue(AttributeType::MovementSpeedBuff, value);
 				}
 
-				mAttributes->SetWeaponDamage(1, 5);
+				// Basic attacks use the class's weapon damage (was a fixed 1-5).
+				const auto [minDamage, maxDamage] = HeroStats::WeaponDamage(data->GetWeaponMinDamage(), data->GetWeaponMaxDamage());
+				mAttributes->SetWeaponDamage(minDamage, maxDamage);
 			}
 		} else {
 			// All nonplayer objects should have an AI object

@@ -1895,6 +1895,12 @@ namespace Game {
 	}
 
 	void Lua::RegisterFunctions() {
+		// Seconds covered by the current simulation step. Scripts accumulate it
+		// in per-frame loops: elapsed += GetSimTimeDt(); coroutine.yield().
+		mState["nTimeManager"].get_or_create<sol::table>()["GetSimTimeDt"] = [this](sol::variadic_args) -> float {
+			return mGame.GetLuaFrameSeconds();
+		};
+
 		// global functions
 		mState["AddEvent"] = [this](sol::this_state L, sol::protected_function callback, uint32_t delay, sol::variadic_args args) {
 			if (delay > 0) {

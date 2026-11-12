@@ -248,6 +248,9 @@ namespace Game {
 			Homeworld GetHomeworld() const;
 			PrimaryAttribute GetPrimaryAttribute() const;
 
+			float GetWeaponMinDamage() const { return mWeaponMinDamage; }
+			float GetWeaponMaxDamage() const { return mWeaponMaxDamage; }
+
 		private:
 			std::shared_ptr<ClassAttributes> mAttributes;
 

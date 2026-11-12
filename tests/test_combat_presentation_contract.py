@@ -125,5 +125,19 @@ class PreloadAndCompatContracts(unittest.TestCase):
         self.assertIn("if math.mod == nil then math.mod = math.fmod end", LUA_CPP)
 
 
+
+class HeroStatsAndTimeContracts(unittest.TestCase):
+    def test_hero_weapon_damage_comes_from_class_data(self):
+        obj = (SRC / "game/object.cpp").read_text(encoding="utf-8")
+        self.assertNotIn("mAttributes->SetWeaponDamage(1, 5);", obj)
+        self.assertIn("HeroStats::WeaponDamage(data->GetWeaponMinDamage(), data->GetWeaponMaxDamage())", obj)
+
+    def test_sim_time_dt_is_the_lua_frame_time(self):
+        self.assertIn('["GetSimTimeDt"] = [this](sol::variadic_args) -> float {', LUA_FN)
+        self.assertIn("return mGame.GetLuaFrameSeconds();", LUA_FN)
+        inst = (SRC / "game/instance.cpp").read_text(encoding="utf-8")
+        self.assertIn("mLuaFrameSeconds = static_cast<float>(delta) / 1000.f;", inst)
+
+
 if __name__ == "__main__":
     unittest.main()

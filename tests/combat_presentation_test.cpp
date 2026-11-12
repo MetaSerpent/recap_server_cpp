@@ -2,6 +2,7 @@
 // modifier handle registry used by the Lua bindings.
 #include "../darkspore_server/source/game/animation_sequence.h"
 #include "../darkspore_server/source/game/attribute_modifier_registry.h"
+#include "../darkspore_server/source/game/hero_stats.h"
 
 #include <cassert>
 #include <cstdint>
@@ -40,6 +41,12 @@ namespace {
 		return NextIndex(Selection::Sequence, 2, cursor, 0) == 1 && cursor == 0;
 	}
 	static_assert(StaleCursor());
+	// Hero weapon damage comes from the class data; bad data keeps the old fallback.
+	static_assert(Game::HeroStats::WeaponDamage(6.f, 12.f) == std::pair<float, float> { 6.f, 12.f });
+	static_assert(Game::HeroStats::WeaponDamage(9.f, 9.f) == std::pair<float, float> { 9.f, 9.f });
+	static_assert(Game::HeroStats::WeaponDamage(0.f, 0.f) == Game::HeroStats::FallbackWeaponDamage);
+	static_assert(Game::HeroStats::WeaponDamage(12.f, 6.f) == Game::HeroStats::FallbackWeaponDamage);
+	static_assert(Game::HeroStats::WeaponDamage(-1.f, 6.f) == Game::HeroStats::FallbackWeaponDamage);
 }
 
 int main() {
