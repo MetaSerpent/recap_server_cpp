@@ -603,3 +603,39 @@ rejects an uninstantiated template in sol2 3.3.1
 `[-Wtemplate-body]`). The workflows are pinned to `ubuntu-24.04`, which
 matches the local WSL compiler. Follow-up (P4): build with GCC 15 by patching
 sol2 at fetch time (CPM and the guardrail clone) once it can be tested.
+
+### Tenth client session on `a584eec` (2026-11-12): held attacks chain
+
+418 casts, 745 responses (about 327 accepted and released, 91 rejected:
+78% accepted, session 9 about 42%), 397 animations, 210 hits, 20 object
+deletions, 4 hero deploys, 1 objectives init; the client left with a normal
+`removePlayer` + disconnect; no client or server crash, no new crash dump.
+Held basic attacks now run as cast, animation, Accepted, hit, Released,
+without the alternating rejection. Rejections come in short runs answered
+immediately with no animation; this build did not log why (fixed in
+`438e085`: one `Cast refused: index N ability 0x... (reason)` line each).
+Squad abilities: not distinguishable in this build's log (same packet length).
+
+Lua errors: 1 (session 9: 38). `template_ability_projectile.lua` called
+`nMathUtil.TransformVector(x, y, z, GetOrientation(obj))`, the form all 7
+game call sites use (projectile and toss templates, missile tempest, twin
+laser, sleep mushroom); the binding only took `(vec3, quat)`, which also
+multiplied by Euler angles instead of rotating. Fixed in `438e085`
+(`game/orientation_math.h`, both forms rotate by the normalised orientation;
+static_asserts in `tests/combat_presentation_test.cpp`).
+
+**Attribute numbering, evidence for the fix (next slice).** The game's
+scripts use attributes from index 74 in 58 files (immunities 74-84,
+`BodyScale` 12 uses, `ChannelTimeDecrease` 12, `AoEDurationIncrease` 7,
+`OnLockdown` 5, ...). Today a script index passes through unchanged, so a
+script-set value reaches the client at the script's index; what breaks is
+(a) C++ logic and data-file attributes from 74 use the server enum's index,
+and (b) `Attributes::SetValue` drops every index from `ClientCount` (111):
+reading `BodyScale` (game 113) always returns 0 and
+`DistributeDamageAmongSquad`/`DefenseBoostPhysicalDamage` are never stored.
+darkspin (build 103) reflects attributes with the game's numbering up to 110,
+min/max weapon damage at 111/112 (its sample hero sends `109: 1, 111: 1,
+112: 5`) and `BodyScale` at 113. Planned fix: translate by name using the
+installed game's own `nAttributeType` table, keep weapon damage at 111/112,
+store server-only attributes without reflecting them; tests with a synthetic
+table (no game script in the repo).
