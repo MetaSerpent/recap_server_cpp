@@ -11,6 +11,7 @@
 #include "client.h"
 
 #include "game/catalyst.h"
+#include "game/cast_queue.h"
 
 #include "blaze/types.h"
 
@@ -26,6 +27,8 @@
 #include <mutex>
 #include <vector>
 #include <map>
+#include <unordered_map>
+#include <unordered_set>
 #include <array>
 #include <queue>
 #include <functional>
@@ -159,6 +162,15 @@ namespace RakNet {
 			void OnHelloPlayerRequest(const ClientPtr& client);
 			void OnPlayerStatusUpdate(const ClientPtr& client);
 			void OnActionCommandMsgs(const ClientPtr& client);
+
+			// Ability casts (see game/cast_queue.h and raknet/action_response.h).
+			void HandleCharacterAbility(const ClientPtr& client, const Game::PlayerPtr& player, const Game::ObjectPtr& object,
+				const ActionCommandData& command, uint32_t attempt);
+			Game::CastResult StartAbilityCast(const ClientPtr& client, const Game::ObjectPtr& object,
+				const ActionCommandData& command, uint32_t abilityId);
+			void ReplayPendingBasicAttack(const ClientPtr& client, uint32_t attempt);
+			void ScheduleBasicAttackRetry(const ClientPtr& client, uint8_t playerId, uint32_t attempt);
+			bool IsConnected(const ClientPtr& client) const;
 			void OnChainPlayerMsgs(const ClientPtr& client);
 			void OnCrystalDragMessage(const ClientPtr& client);
 			void OnLootDropMessage(const ClientPtr& client);
@@ -241,6 +253,10 @@ namespace RakNet {
 			Game::Instance& mGame;
 
 			std::map<SystemAddress, ClientPtr> mClients;
+			// Latest basic attack received while the hero was mid-swing, per player.
+			std::unordered_map<uint8_t, ActionCommandData> mPendingBasicAttacks;
+			// Players with a retry already scheduled (one retry chain per player).
+			std::unordered_set<uint8_t> mBasicAttackRetries;
 
 			// Thread
 			std::thread mThread;

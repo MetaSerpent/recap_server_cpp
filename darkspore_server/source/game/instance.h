@@ -3,6 +3,7 @@
 #define _GAME_INSTANCE_HEADER
 
 // Include
+#include "cast_queue.h"
 #include "predefined.h"
 
 #include "blaze/types.h"
@@ -194,7 +195,7 @@ namespace Game {
 			void MoveObject(const ObjectPtr& object, const Locomotion& locomotionData);
 
 			// Abilities / Combat / Etc
-			bool UseAbility(const ObjectPtr& object, const RakNet::CombatData& combatData);
+			CastResult UseAbility(const ObjectPtr& object, const RakNet::CombatData& combatData);
 			void SwapCharacter(const PlayerPtr& player, uint32_t creatureIndex);
 			void InteractWithObject(const PlayerPtr& player, uint32_t objectId);
 			void CancelAction(const PlayerPtr& player, const ObjectPtr& object);

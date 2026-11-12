@@ -560,3 +560,46 @@ Also fixed after this session:
 - `nTimeManager.GetSimTimeDt` returned nothing; projectile, nova and several
   modifier scripts loop `elapsed += GetSimTimeDt(); coroutine.yield()`. It now
   returns the duration of the current Lua update in seconds.
+
+### Held basic attacks and squad cast responses (implemented, not yet client-tested)
+
+Session 9 showed every other swing of a held basic attack rejected: the client
+re-sends the attack during the swing while the hero's script is still running.
+- `Instance::UseAbility` now says why a cast did not start
+  (`game/cast_queue.h`: `Started`, `Busy`, `OnCooldown`, `Unavailable`)
+  instead of `true`/`false`. `Busy` is the same test `Ability::Tick` already
+  refused on (the hero's Lua thread is not dead).
+- A **busy basic attack** (index 0) is kept as the player's pending attack
+  (latest wins; a superseded one is answered with Rejected so the client never
+  waits on it) and started when the current swing's Released is sent, with a
+  50 ms retry, bounded to 40 tries (2 s), then Rejected. One retry chain per
+  player; the replay re-checks object ownership like a fresh command; pending
+  attacks are dropped on disconnect (player ids are reused). Specials, cooldown
+  and unavailable refusals are still rejected at once. This follows darkspin's
+  "repeat the held command after the release"; the exact build-103 client rule
+  is not recovered (darkspin waits for max(cooldown, release)).
+- The **squad-ability path** used the old upstream `AbilityCommandResponse`
+  layout (not the 56-byte build-103 response). It now shares the hero path
+  (`Server::StartAbilityCast`: Accepted with the ability's hit/release timing,
+  Released at release time) and answers every refusal with Rejected.
+
+Tests: queue policy `static_assert`s in `tests/action_response_test.cpp`
+(WSL g++ 13.3 with CI flags: passed); contracts in
+`tests/test_combat_presentation_contract.py` (`HeldBasicAttackContracts`,
+squad cases); the dispatch/squad contracts that pinned the old bool/upstream
+response form now pin the same guarantees at their new location (ack only
+after the script started; unscripted abilities refused; responses keyed by the
+command's sync stamp, user data still passed to Lua). Python suite: 185 OK.
+The full server is compiled by CI only (no local boost/openssl/MSVC 2022).
+Next gate: client session 10, held attack swings without alternating
+rejections; squad abilities (slots 6-8) cast with a response.
+
+### Ubuntu CI pinned to 24.04 (2026-11-12)
+
+`c42dc03` failed both Ubuntu workflows without any related change: GitHub's
+`ubuntu-latest` moved from 24.04 (GCC 13.3) to 26.04 (GCC 15.2), and GCC 15
+rejects an uninstantiated template in sol2 3.3.1
+(`sol::optional<T&>::emplace` calls a nonexistent `construct`,
+`[-Wtemplate-body]`). The workflows are pinned to `ubuntu-24.04`, which
+matches the local WSL compiler. Follow-up (P4): build with GCC 15 by patching
+sol2 at fetch time (CPM and the guardrail clone) once it can be tested.

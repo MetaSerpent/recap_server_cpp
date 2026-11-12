@@ -76,26 +76,82 @@ class BindingCallFormContracts(unittest.TestCase):
 
 class CastResponseContracts(unittest.TestCase):
     def setUp(self):
-        self.handler = SERVER.split("case ActionCommand::UseCharacterAbility:", 1)[1].split("case ActionCommand::UseSquadAbility:", 1)[0]
+        self.case = SERVER.split("case ActionCommand::UseCharacterAbility:", 1)[1].split("case ActionCommand::UseSquadAbility:", 1)[0]
+        self.handler = SERVER.split("void Server::HandleCharacterAbility(", 1)[1].split("void Server::ScheduleBasicAttackRetry(", 1)[0]
+        self.start = SERVER.split("Game::CastResult Server::StartAbilityCast(", 1)[1].split("void Server::HandleCharacterAbility(", 1)[0]
+        self.squad = SERVER.split("case ActionCommand::UseSquadAbility:", 1)[1].split("// Catalyst pickup", 1)[0]
+
+    def test_hero_case_goes_through_the_handler(self):
+        self.assertIn("HandleCharacterAbility(client, player, object, command, 0);", self.case)
 
     def test_every_refused_cast_is_rejected(self):
-        self.assertIn("const uint8_t syncStamp = command.data.unk[0];", self.handler)
-        self.assertIn("ActionResponse::Reject(syncStamp, command.data.objectId)", self.handler)
-        # invalid index, no ability for the slot, and a refused UseAbility
+        self.assertIn("ActionResponse::Reject(command.data.unk[0], command.data.objectId)", self.handler)
+        # invalid index, no ability for the slot, and a refusal that is not queued
         self.assertEqual(self.handler.count("rejectCast();"), 3)
-        for refusal in ("IsValidAbilityIndex(command.ability.index)) {", "cast ignored.", "if (!mGame.UseAbility(object, combatData)) {"):
+        for refusal in ("IsValidAbilityIndex(command.ability.index)) {", "cast ignored."):
             after = self.handler.split(refusal, 1)[1]
-            self.assertLess(after.index("rejectCast();"), after.index("break;"))
+            self.assertLess(after.index("rejectCast();"), after.index("return;"))
+        self.assertTrue(self.handler.rstrip().endswith("rejectCast();\n\t}"))
 
     def test_accepted_casts_are_timed_from_ability_data_and_released(self):
-        self.assertIn("ability->GetActiveCastTiming(hitMs, releaseMs)", self.handler)
-        self.assertIn("ActionResponse::Type::Accepted, syncStamp, combatData.abilityId", self.handler)
-        self.assertIn("released.type = ActionResponse::Type::Released;", self.handler)
-        self.assertIn("mGame.AddTask(releaseMs,", self.handler)
-        self.assertIn("std::weak_ptr<Client> weakClient = client;", self.handler)
+        self.assertIn("const auto result = mGame.UseAbility(object, combatData);", self.start)
+        self.assertIn("ability->GetActiveCastTiming(hitMs, releaseMs)", self.start)
+        self.assertIn("ActionResponse::Type::Accepted, command.data.unk[0], abilityId", self.start)
+        self.assertIn("released.type = ActionResponse::Type::Released;", self.start)
+        self.assertIn("mGame.AddTask(releaseMs,", self.start)
+        self.assertIn("std::weak_ptr<Client> weakClient = client;", self.start)
         # the disabled upstream packet must not come back
-        self.assertNotIn("//SendActionCommandResponse(client, actionResponse);", self.handler)
+        self.assertNotIn("//SendActionCommandResponse(client, actionResponse);", SERVER)
 
+    def test_squad_casts_use_the_build_103_responses(self):
+        self.assertIn("StartAbilityCast(client, object, command, abilityId) != Game::CastResult::Started", self.squad)
+        self.assertEqual(self.squad.count("reject();"), 3)
+        for body in (self.squad, self.start, self.handler):
+            self.assertNotIn("AbilityCommandResponse response", body)
+
+
+class HeldBasicAttackContracts(unittest.TestCase):
+    def setUp(self):
+        self.inst = (SRC / "game/instance.cpp").read_text(encoding="utf-8")
+        self.handler = SERVER.split("void Server::HandleCharacterAbility(", 1)[1].split("void Server::ScheduleBasicAttackRetry(", 1)[0]
+        self.retry = SERVER.split("void Server::ScheduleBasicAttackRetry(", 1)[1].split("void Server::ReplayPendingBasicAttack(", 1)[0]
+        self.replay = SERVER.split("void Server::ReplayPendingBasicAttack(", 1)[1].split("void Server::OnActionCommandMsgs(", 1)[0]
+
+    def test_use_ability_reports_why_a_cast_did_not_start(self):
+        use = self.inst.split("CastResult Instance::UseAbility(", 1)[1].split("\n\t}\n", 1)[0]
+        self.assertIn("return CastResult::OnCooldown;", use)
+        self.assertIn("thread->status() != sol::thread_status::dead) {\n\t\t\treturn CastResult::Busy;", use)
+        self.assertIn("? CastResult::Started : CastResult::Unavailable;", use)
+
+    def test_busy_basic_attack_is_kept_with_one_retry_chain(self):
+        self.assertIn("Game::CastQueue::OnRefused(result, command.ability.index) == Game::CastQueue::Refusal::KeepAsPending", self.handler)
+        self.assertIn("Game::CastQueue::ShouldRetry(result, attempt)", self.handler)
+        self.assertIn("mPendingBasicAttacks.try_emplace(player->GetId(), command); !inserted) {", self.handler)
+        # the superseded attack is answered, then replaced by the latest one
+        superseded = self.handler.split("!inserted) {", 1)[1]
+        self.assertLess(superseded.index("ActionResponse::Reject(pending->second.data.unk[0]"), superseded.index("pending->second = command;"))
+        self.assertIn("if (mBasicAttackRetries.insert(player->GetId()).second) {", self.handler)
+        self.assertIn("mGame.AddTask(Game::CastQueue::RetryIntervalMs,", self.retry)
+        self.assertIn("mBasicAttackRetries.erase(playerId);", self.retry)
+
+    def test_release_starts_the_pending_attack(self):
+        start = SERVER.split("Game::CastResult Server::StartAbilityCast(", 1)[1].split("void Server::HandleCharacterAbility(", 1)[0]
+        release = start.split("released.type = ActionResponse::Type::Released;", 1)[1]
+        self.assertLess(release.index("SendActionCommandResponse(target, released);"), release.index("ReplayPendingBasicAttack(target, 0);"))
+
+    def test_replay_revalidates_ownership_and_disconnect_clears_it(self):
+        self.assertIn("mPendingBasicAttacks.erase(it);", self.replay)
+        self.assertIn("object->GetPlayerIndex() != player->GetId()", self.replay)
+        self.assertIn("IsMarkedForDeletion()", self.replay)
+        remove = SERVER.split("void Server::RemoveClient(Packet* packet) {", 1)[1].split("ClientPtr Server::GetClient(", 1)[0]
+        self.assertLess(remove.index("mPendingBasicAttacks.erase(player->GetId());"), remove.index("mClients.erase(packet->systemAddress);"))
+
+    def test_policy_is_tested_in_ci(self):
+        test = (ROOT / "tests/action_response_test.cpp").read_text(encoding="utf-8")
+        self.assertIn('#include "../darkspore_server/source/game/cast_queue.h"', test)
+        self.assertIn("OnRefused(CastResult::Busy, 0) == Refusal::KeepAsPending", test)
+
+class CastTimingContracts(unittest.TestCase):
     def test_timing_reads_the_sequence_entry(self):
         timing = LUA_CPP.split("bool Ability::GetActiveCastTiming(", 1)[1].split("// Objective", 1)[0]
         self.assertIn('entryTable["hit"]', timing)

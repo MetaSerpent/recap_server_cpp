@@ -513,6 +513,12 @@ namespace RakNet {
 
 	void Server::RemoveClient(Packet* packet) {
 		if (packet) {
+			// Player ids are reused: a held attack must not replay for the next client.
+			if (const auto it = mClients.find(packet->systemAddress); it != mClients.end() && it->second) {
+				if (const auto& player = it->second->GetPlayer()) {
+					mPendingBasicAttacks.erase(player->GetId());
+				}
+			}
 			mClients.erase(packet->systemAddress);
 		}
 	}
@@ -694,6 +700,157 @@ namespace RakNet {
 		player->ResetUpdateBits();
 	}
 
+	bool Server::IsConnected(const ClientPtr& client) const {
+		if (!client) {
+			return false;
+		}
+		for (const auto& [_, connected] : mClients) {
+			if (connected == client) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	Game::CastResult Server::StartAbilityCast(const ClientPtr& client, const Game::ObjectPtr& object,
+		const ActionCommandData& command, uint32_t abilityId) {
+		CombatData combatData{};
+		combatData.targetId = command.ability.targetId;
+		combatData.cursorPosition = command.ability.cursorPosition;
+		combatData.targetPosition = command.ability.targetPosition;
+		combatData.abilityId = abilityId;
+		combatData.abilityRank = command.ability.rank;
+		combatData.unk[0] = command.ability.rank;
+		combatData.unk[1] = command.ability.unk;
+		combatData.valueFromActionResponse = command.ability.userData;
+
+		const auto result = mGame.UseAbility(object, combatData);
+		if (result != Game::CastResult::Started) {
+			return result;
+		}
+
+		// Accepted now, Released when the animation's release time is reached.
+		// Timing comes from the ability's own data (see raknet/action_response.h).
+		uint32_t hitMs = 0;
+		uint32_t releaseMs = 0;
+		const auto& ability = mGame.GetLua().GetAbility(abilityId);
+		ActionResponse::Message accepted;
+		if (!ability || !ability->GetActiveCastTiming(hitMs, releaseMs) ||
+			!ActionResponse::Timed(accepted, ActionResponse::Type::Accepted, command.data.unk[0], abilityId,
+				command.ability.index, mGame.GetTime(), hitMs, releaseMs)) {
+			static std::unordered_set<uint32_t> reported;
+			if (reported.insert(abilityId).second) {
+				std::cout << "Ability 0x" << std::hex << abilityId << std::dec
+				          << ": no hit/release timing in its data; no cast response sent." << std::endl;
+			}
+			return result;
+		}
+		SendActionCommandResponse(client, accepted);
+
+		ActionResponse::Message released = accepted;
+		released.type = ActionResponse::Type::Released;
+		std::weak_ptr<Client> weakClient = client;
+		mGame.AddTask(releaseMs, [this, weakClient, released](uint32_t taskId) {
+			mGame.AddServerTask([this, taskId, weakClient, released]() {
+				mGame.CancelTask(taskId);
+				const auto target = weakClient.lock();
+				if (!IsConnected(target)) {
+					return;
+				}
+				SendActionCommandResponse(target, released);
+				// A basic attack held during this swing starts now.
+				ReplayPendingBasicAttack(target, 0);
+			});
+		});
+		return result;
+	}
+
+	void Server::HandleCharacterAbility(const ClientPtr& client, const Game::PlayerPtr& player, const Game::ObjectPtr& object,
+		const ActionCommandData& command, uint32_t attempt) {
+		// The client waits for an answer to every cast: tell it when the cast is
+		// refused, echoing the command's sync stamp (unk[0]).
+		const auto rejectCast = [&]() {
+			SendActionCommandResponse(client, ActionResponse::Reject(command.data.unk[0], command.data.objectId));
+		};
+		if (!Game::AbilitySelection::IsValidAbilityIndex(command.ability.index)) {
+			rejectCast();
+			return;
+		}
+
+		const auto creatureIndex = Game::AbilitySelection::ResolveHeroForAbility(
+			player->GetCurrentDeckIndex(), command.ability.index);
+		const auto abilityId = player->GetAbilityId(static_cast<uint8_t>(creatureIndex), static_cast<uint8_t>(command.ability.index));
+		if (abilityId == 0) {
+			// Report each unresolved (hero, ability index) once per server run.
+			static std::unordered_set<uint32_t> reported;
+			if (reported.insert((creatureIndex << 8) | command.ability.index).second) {
+				std::cout << "Ability: hero slot " << creatureIndex << " has no ability for index "
+				          << command.ability.index << "; cast ignored." << std::endl;
+			}
+			rejectCast();
+			return;
+		}
+
+		const auto result = StartAbilityCast(client, object, command, abilityId);
+		if (result == Game::CastResult::Started) {
+			return;
+		}
+		if (Game::CastQueue::OnRefused(result, command.ability.index) == Game::CastQueue::Refusal::KeepAsPending &&
+			Game::CastQueue::ShouldRetry(result, attempt)) {
+			// Latest held attack wins; it starts when the hero is free.
+			if (const auto [pending, inserted] = mPendingBasicAttacks.try_emplace(player->GetId(), command); !inserted) {
+				// Superseded by the newer one: answer it so the client never waits on it.
+				SendActionCommandResponse(client, ActionResponse::Reject(pending->second.data.unk[0], pending->second.data.objectId));
+				pending->second = command;
+			}
+			if (mBasicAttackRetries.insert(player->GetId()).second) {
+				ScheduleBasicAttackRetry(client, player->GetId(), attempt + 1);
+			}
+			return;
+		}
+		rejectCast();
+	}
+
+	void Server::ScheduleBasicAttackRetry(const ClientPtr& client, uint8_t playerId, uint32_t attempt) {
+		std::weak_ptr<Client> weakClient = client;
+		mGame.AddTask(Game::CastQueue::RetryIntervalMs, [this, weakClient, playerId, attempt](uint32_t taskId) {
+			mGame.AddServerTask([this, taskId, weakClient, playerId, attempt]() {
+				mGame.CancelTask(taskId);
+				mBasicAttackRetries.erase(playerId);
+				const auto target = weakClient.lock();
+				if (!IsConnected(target)) {
+					mPendingBasicAttacks.erase(playerId);
+					return;
+				}
+				ReplayPendingBasicAttack(target, attempt);
+			});
+		});
+	}
+
+	void Server::ReplayPendingBasicAttack(const ClientPtr& client, uint32_t attempt) {
+		if (!IsConnected(client)) {
+			return;
+		}
+		const auto& player = client->GetPlayer();
+		if (!player) {
+			return;
+		}
+		const auto it = mPendingBasicAttacks.find(player->GetId());
+		if (it == mPendingBasicAttacks.end()) {
+			return;
+		}
+		const ActionCommandData command = it->second;
+		mPendingBasicAttacks.erase(it);
+
+		// Same ownership checks as a freshly received command.
+		const auto& object = mGame.GetObjectManager().Get(command.data.objectId);
+		if (!object || object->IsMarkedForDeletion() ||
+			!object->IsPlayerControlled() || object->GetPlayerIndex() != player->GetId()) {
+			return;
+		}
+		HandleCharacterAbility(client, player, object, command, attempt);
+	}
+
 	void Server::OnActionCommandMsgs(const ClientPtr& client) {
 		const auto& player = client->GetPlayer();
 		if (!player) {
@@ -768,131 +925,33 @@ namespace RakNet {
 
 			// Ability
 			case ActionCommand::UseCharacterAbility: {
-					std::cout << "=== Start UseCharacterAbility ===" << std::endl;
-					
-					Read<ActionCommandAbilityData>(mInStream, command.ability);
-					// The client waits for an answer to every cast: tell it when the
-					// cast is refused, echoing the command's sync stamp (unk[0]).
-					const uint8_t syncStamp = command.data.unk[0];
-					const auto rejectCast = [&]() {
-						SendActionCommandResponse(client, ActionResponse::Reject(syncStamp, command.data.objectId));
-					};
-					if (!Game::AbilitySelection::IsValidAbilityIndex(command.ability.index)) {
-						rejectCast();
-						break;
-					}
-
-					std::cout << "Target ID: " << command.ability.targetId << std::endl;
-					std::cout << "Ability Index: " << command.ability.index << std::endl;
-
-					CombatData combatData{};
-					combatData.targetId = command.ability.targetId;
-					combatData.cursorPosition = command.ability.cursorPosition;
-					combatData.targetPosition = command.ability.targetPosition;
-					const auto creatureIndex = Game::AbilitySelection::ResolveHeroForAbility(
-						player->GetCurrentDeckIndex(), command.ability.index);
-					combatData.abilityId = player->GetAbilityId(static_cast<uint8_t>(creatureIndex), static_cast<uint8_t>(command.ability.index));
-					if (combatData.abilityId == 0) {
-						// Report each unresolved (hero, ability index) once per server run.
-						static std::unordered_set<uint32_t> reported;
-						if (reported.insert((creatureIndex << 8) | command.ability.index).second) {
-							std::cout << "Ability: hero slot " << creatureIndex << " has no ability for index "
-							          << command.ability.index << "; cast ignored." << std::endl;
-						}
-						rejectCast();
-						break;
-					}
-					combatData.abilityRank = command.ability.rank;
-					combatData.unk[0] = command.ability.rank;
-					combatData.unk[1] = command.ability.unk;
-					combatData.valueFromActionResponse = command.ability.userData;
-
-					if (!mGame.UseAbility(object, combatData)) {
-						rejectCast();
-						break;
-					}
-
-					// Accepted now, Released when the animation's release time is
-					// reached. Timing comes from the ability's own data; without it
-					// no response can be built (see raknet/action_response.h).
-					uint32_t hitMs = 0;
-					uint32_t releaseMs = 0;
-					const auto& ability = mGame.GetLua().GetAbility(combatData.abilityId);
-					ActionResponse::Message accepted;
-					if (ability && ability->GetActiveCastTiming(hitMs, releaseMs) &&
-						ActionResponse::Timed(accepted, ActionResponse::Type::Accepted, syncStamp, combatData.abilityId,
-							command.ability.index, mGame.GetTime(), hitMs, releaseMs)) {
-						SendActionCommandResponse(client, accepted);
-
-						ActionResponse::Message released = accepted;
-						released.type = ActionResponse::Type::Released;
-						std::weak_ptr<Client> weakClient = client;
-						mGame.AddTask(releaseMs, [this, weakClient, released](uint32_t taskId) {
-							mGame.AddServerTask([this, taskId, weakClient, released]() {
-								mGame.CancelTask(taskId);
-								const auto target = weakClient.lock();
-								if (!target) {
-									return;
-								}
-								// Only while that client is still connected to this game.
-								for (const auto& [_, connected] : GetClients()) {
-									if (connected == target) {
-										SendActionCommandResponse(target, released);
-										break;
-									}
-								}
-							});
-						});
-					} else {
-						static std::unordered_set<uint32_t> reported;
-						if (reported.insert(combatData.abilityId).second) {
-							std::cout << "Ability 0x" << std::hex << combatData.abilityId << std::dec
-							          << ": no hit/release timing in its data; no cast response sent." << std::endl;
-						}
-					}
-
-					std::cout << "=== End UseCharacterAbility ===" << std::endl;
-					break;
+				Read<ActionCommandAbilityData>(mInStream, command.ability);
+				HandleCharacterAbility(client, player, object, command, 0);
+				break;
 			}
 
 			// Squad ability
 			case ActionCommand::UseSquadAbility: {
 				Read<ActionCommandAbilityData>(mInStream, command.ability);
+				const auto reject = [&]() {
+					SendActionCommandResponse(client, ActionResponse::Reject(command.data.unk[0], command.data.objectId));
+				};
 				// Squad ability slots 6-8 belong to the three party members.
 				if (!Game::AbilitySelection::IsSquadAbility(command.ability.index)) {
+					reject();
 					break;
 				}
-
 				const auto abilityId = player->GetAbilityId(0xFF, static_cast<uint8_t>(command.ability.index));
-				if (abilityId == 0 || object->HasCooldown(abilityId)) {
+				if (abilityId == 0) {
+					reject();
 					break;
 				}
-				// Do not acknowledge an ability that has no script implementation.
-				if (!mGame.GetLua().GetAbility(abilityId)) {
-					break;
-				}
-
 				object->SetOrientation(command.data.orientation);
-				CombatData combatData{};
-				combatData.targetId = command.ability.targetId;
-				combatData.cursorPosition = command.ability.cursorPosition;
-				combatData.targetPosition = command.ability.targetPosition;
-				combatData.abilityId = abilityId;
-				combatData.abilityRank = command.ability.rank;
-				combatData.unk[0] = command.ability.rank;
-				combatData.unk[1] = command.ability.unk;
-				combatData.valueFromActionResponse = command.ability.userData;
-
-				if (!mGame.UseAbility(object, combatData)) {
-					break; // Never acknowledge an action rejected by the Lua scheduler.
+				// Same build-103 responses as hero abilities (56-byte ActionCommandResponse);
+				// the old upstream AbilityCommandResponse layout sent here does not match it.
+				if (StartAbilityCast(client, object, command, abilityId) != Game::CastResult::Started) {
+					reject();
 				}
-
-				// Lua scripts manage their own cooldown updates. Avoid fabricating
-				// a 2-second cooldown or a completed boss/director state here.
-				AbilityCommandResponse response{};
-				response.abilityId = abilityId;
-				response.userData = command.ability.userData;
-				SendActionCommandResponse(client, response);
 				break;
 			}
 

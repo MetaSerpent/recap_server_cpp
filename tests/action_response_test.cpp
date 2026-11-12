@@ -1,7 +1,8 @@
-// Byte-exact tests for the build-103 ActionCommandResponse payload and the
-// team validation rules (both pure, no game data).
+// Byte-exact tests for the build-103 ActionCommandResponse payload, the
+// team validation rules and the held basic attack policy (all pure, no game data).
 #include "../darkspore_server/source/raknet/action_response.h"
 #include "../darkspore_server/source/game/team_validation.h"
+#include "../darkspore_server/source/game/cast_queue.h"
 
 #include <cassert>
 #include <cstdint>
@@ -61,6 +62,21 @@ namespace {
 	using Game::TeamValidation::IsHostile;
 	static_assert(IsHostile(1, 2) && !IsHostile(1, 1) && IsHostile(0, 1) && IsHostile(1, 0));
 	static_assert(IsFriendly(1, 1) && !IsFriendly(1, 2) && IsFriendly(0, 2));
+
+	// Held basic attack (index 0) arriving mid-swing is kept and started on
+	// release; every other refusal is answered with Rejected at once.
+	using Game::CastResult;
+	using namespace Game::CastQueue;
+	static_assert(OnRefused(CastResult::Busy, 0) == Refusal::KeepAsPending);
+	static_assert(OnRefused(CastResult::Busy, 1) == Refusal::Reject);         // specials are not queued
+	static_assert(OnRefused(CastResult::Busy, 5) == Refusal::Reject);
+	static_assert(OnRefused(CastResult::OnCooldown, 0) == Refusal::Reject);
+	static_assert(OnRefused(CastResult::Unavailable, 0) == Refusal::Reject);
+	// Retries are bounded: a script that never ends cannot keep the client waiting.
+	static_assert(ShouldRetry(CastResult::Busy, 0) && ShouldRetry(CastResult::Busy, MaxRetries - 1));
+	static_assert(!ShouldRetry(CastResult::Busy, MaxRetries));
+	static_assert(!ShouldRetry(CastResult::OnCooldown, 0) && !ShouldRetry(CastResult::Unavailable, 0));
+	static_assert(RetryIntervalMs > 0 && RetryIntervalMs * MaxRetries <= 5'000);
 }
 
 int main() {

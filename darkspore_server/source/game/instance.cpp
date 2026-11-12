@@ -779,9 +779,12 @@ namespace Game {
 		}
 	}
 
-	bool Instance::UseAbility(const ObjectPtr& object, const RakNet::CombatData& combatData) {
-		if (!object || combatData.abilityId == 0 || object->HasCooldown(combatData.abilityId)) {
-			return false;
+	CastResult Instance::UseAbility(const ObjectPtr& object, const RakNet::CombatData& combatData) {
+		if (!object || combatData.abilityId == 0) {
+			return CastResult::Unavailable;
+		}
+		if (object->HasCooldown(combatData.abilityId)) {
+			return CastResult::OnCooldown;
 		}
 
 		const auto& ability = mLua->GetAbility(combatData.abilityId);
@@ -792,13 +795,16 @@ namespace Game {
 				std::cout << "Ability 0x" << std::hex << combatData.abilityId << std::dec
 				          << ": no registered ability script; cast ignored." << std::endl;
 			}
-			return false;
+			return CastResult::Unavailable;
 		}
 
-		// Tick returns false when the script is unavailable or the actor's
-		// existing Lua coroutine cannot accept another action.
+		// The hero's previous ability script is still running (mid-swing).
+		if (const auto thread = object->GetLuaThread(); thread && thread->status() != sol::thread_status::dead) {
+			return CastResult::Busy;
+		}
+
 		return ability->Tick(object, mObjectManager->Get(combatData.targetId),
-			combatData.cursorPosition, combatData.abilityRank);
+			combatData.cursorPosition, combatData.abilityRank) ? CastResult::Started : CastResult::Unavailable;
 	}
 
 	void Instance::SwapCharacter(const PlayerPtr& player, uint32_t creatureIndex) {
