@@ -677,3 +677,28 @@ identity default, set-once), `tests/test_attribute_layout_contract.py` (name
 table equals the enum order, boundaries translate, storage, startup). Needs:
 server log line at startup, then a client session (immunities, body scale,
 squad damage sharing).
+
+### Eleventh client session on `f54ae2b` (2026-11-12): worse than session 10
+
+Reported by the player as worse than session 10. 50 casts, 41 accepted, 42
+animations but only 11 hits; the hero stayed busy for more than 2 s after a
+swing (3 held attacks refused after the 2 s retry window) until a hero switch.
+The stuck abilities were `SplinteringCleave` and `PlasmaSentinelBasic`, both
+on `template_ability_melee.lua`.
+
+Cause (present since upstream, not introduced by f54ae2b): `nThread.WaitUntilTime`
+was an alias of `WaitForXSeconds`. The templates call it with each hit time from
+`GetTimeToHit` and then the release time, all counted from the start of the
+cast (182 calls in 109 scripts), so the waits added up: hits at 0.5/1.0/1.5 s
+landed at 0.5/1.5/3.0 s and the script ran seconds past the client's Released,
+refusing the next attacks as busy and hitting targets that had moved. Fixed:
+`LuaThread` records when its script started and `WaitUntilTime` resumes at
+start + t (`game/thread_timing.h`, static_asserts in
+`tests/combat_presentation_test.cpp`). Attack speed scaling is unchanged.
+
+Regression from f54ae2b: the game spells three attributes differently
+(`AoeResistance` 27, `RejectModifiers` 36, `AoERadius` 62); the name match
+dropped them (startup log: "unknown to the server"), so scripts read 0 and
+could not set them, and the client no longer received them. Aliased; checked
+locally against the installed build-103 table: 114 of 115 entries resolve
+(`Primary` is -1, not an attribute), 110 attributes reflected.

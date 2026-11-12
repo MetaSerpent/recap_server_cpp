@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <mutex>
 #include <string_view>
+#include <utility>
 
 // Attribute numbering of the installed game.
 //
@@ -57,7 +58,21 @@ namespace Game::AttributeLayout {
 	// and 112 carry the min/max weapon damage (upstream and darkspin).
 	inline constexpr uint8_t ReflectedLimit = 111;
 
+	// Same attribute, spelled differently by the game's nAttributeType (build
+	// 103: indices 27, 36 and 62, where both numberings agree).
+	inline constexpr std::array<std::pair<std::string_view, std::string_view>, 3> GameSpellings { {
+		{ "AoeResistance", "AoEResistance" },
+		{ "RejectModifiers", "RejectModifier" },
+		{ "AoERadius", "AoeRadius" },
+	} };
+
 	constexpr uint8_t ServerIndex(std::string_view name) noexcept {
+		for (const auto& [game, server] : GameSpellings) {
+			if (name == game) {
+				name = server;
+				break;
+			}
+		}
 		for (std::size_t i = 0; i < ServerNames.size(); ++i) {
 			if (ServerNames[i] == name) {
 				return static_cast<uint8_t>(i);

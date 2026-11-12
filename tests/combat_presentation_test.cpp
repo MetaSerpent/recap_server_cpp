@@ -4,6 +4,7 @@
 #include "../darkspore_server/source/game/attribute_modifier_registry.h"
 #include "../darkspore_server/source/game/hero_stats.h"
 #include "../darkspore_server/source/game/orientation_math.h"
+#include "../darkspore_server/source/game/thread_timing.h"
 
 #include <cassert>
 #include <cstdint>
@@ -66,6 +67,19 @@ namespace {
 	static_assert(Near(Rotate({ 1.f, 0.f, 0.f }, 0.f, 1.f, 0.f, 0.f), { -1.f, 0.f, 0.f }));             // 180 deg about y
 	static_assert(Near(Rotate({ 0.f, 1.f, 0.f }, kHalfSqrt2, 0.f, 0.f, kHalfSqrt2), { 0.f, 0.f, 1.f }));  // 90 deg about x
 	static_assert(Near(Rotate({ 4.f, 5.f, 6.f }, 0.f, 0.f, 0.f, 0.f), { 4.f, 5.f, 6.f }));             // zero quaternion
+
+	// Melee template: hits at 0.5/1.0/1.5 s and release at 1.8 s, all counted
+	// from the start of the cast, must not add up.
+	using Game::ThreadTiming::ResumeAt;
+	using Game::ThreadTiming::Wait;
+	constexpr uint64_t kStart = 10'000;
+	static_assert(ResumeAt(Wait::UntilTime, kStart, kStart, 0.5) == 10'500);
+	static_assert(ResumeAt(Wait::UntilTime, 10'500, kStart, 1.0) == 11'000);   // not 11'500
+	static_assert(ResumeAt(Wait::UntilTime, 11'000, kStart, 1.5) == 11'500);   // not 13'000
+	static_assert(ResumeAt(Wait::UntilTime, 11'500, kStart, 1.8) == 11'800);   // released at 1.8 s
+	static_assert(ResumeAt(Wait::UntilTime, 12'000, kStart, 1.0) == 11'000);   // already passed: next update
+	static_assert(ResumeAt(Wait::ForSeconds, 10'500, kStart, 1.0) == 11'500);  // WaitForXSeconds stays relative
+	static_assert(ResumeAt(Wait::ForSeconds, 10'500, kStart, 0.0) == 10'500 && ResumeAt(Wait::UntilTime, 10'500, kStart, -1.0) == 10'500);
 }
 
 int main() {

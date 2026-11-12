@@ -34,6 +34,12 @@ namespace {
 	static_assert(ServerIndex("ImmuneToSleep") == 74 && ServerIndex("BodyScale") == 110);
 	static_assert(ServerIndex("ImmuneToShocked") == 111 && ServerIndex("DefenseBoostPhysicalDamage") == 114);
 	static_assert(ServerIndex("NoSuchAttribute") == None);
+	// The game spells three attributes differently (same index in both numberings).
+	static_assert(ServerIndex("AoERadius") == 62 && ServerIndex("AoeRadius") == 62);
+	static_assert(ServerIndex("AoeResistance") == 27 && ServerIndex("AoEResistance") == 27);
+	static_assert(ServerIndex("RejectModifiers") == 36 && ServerIndex("RejectModifier") == 36);
+	constexpr std::array<std::pair<std::string_view, int>, 1> kSpelled { { { "AoERadius", 62 } } };
+	static_assert(Map::FromGameNames(kSpelled).ToServer(62) == 62 && Map::FromGameNames(kSpelled).IsReflected(62));
 
 	// Without a game table nothing changes: identity, reflected below 111.
 	static_assert(kIdentity.IsIdentity());

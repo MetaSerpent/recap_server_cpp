@@ -7,6 +7,7 @@
 #include "lua_type_filter.h"
 #include "orientation_math.h"
 #include "team_validation.h"
+#include "thread_timing.h"
 
 #include "instance.h"
 #include "objectmanager.h"
@@ -2842,40 +2843,44 @@ namespace Game {
 			YieldThread(thread);
 		});
 
-		thread["WaitForXSeconds"] = sol::yielding([this](sol::this_state L, double seconds, sol::optional<sol::object> attributesSnapshotValue, sol::optional<bool> channeling) {
-			auto thread = GetThread(L);
-			if (!thread) {
-				return;
-			}
+		// WaitForXSeconds waits from now; WaitUntilTime waits until a time
+		// counted from the start of the script (game/thread_timing.h).
+		const auto waitFor = [this](Game::ThreadTiming::Wait wait) {
+			return sol::yielding([this, wait](sol::this_state L, double seconds, sol::optional<sol::object> attributesSnapshotValue, sol::optional<bool> channeling) {
+				auto thread = GetThread(L);
+				if (!thread) {
+					return;
+				}
 
-			if (seconds > 0) {
-				auto ability = LuaGetAbility(L);
-				if (ability && attributesSnapshotValue.has_value() && attributesSnapshotValue->is<Game::AttributesPtr>()) {
-					const auto descriptors = ability->GetDescriptors();
-					const auto& attributes = attributesSnapshotValue->as<Game::AttributesPtr>();
+				if (seconds > 0) {
+					auto ability = LuaGetAbility(L);
+					if (ability && attributesSnapshotValue.has_value() && attributesSnapshotValue->is<Game::AttributesPtr>()) {
+						const auto descriptors = ability->GetDescriptors();
+						const auto& attributes = attributesSnapshotValue->as<Game::AttributesPtr>();
 
-					if (attributes) {
-						if (utils::enum_helper<Game::Descriptors>::test(descriptors, Game::Descriptors::IsBasic)) {
-							seconds /= std::max(-0.9f, attributes->GetValue(Game::AttributeType::AttackSpeedScale)) + 1;
-						}
+						if (attributes) {
+							if (utils::enum_helper<Game::Descriptors>::test(descriptors, Game::Descriptors::IsBasic)) {
+								seconds /= std::max(-0.9f, attributes->GetValue(Game::AttributeType::AttackSpeedScale)) + 1;
+							}
 
-						if (utils::enum_helper<Game::Descriptors>::test(descriptors, Game::Descriptors::IsChannel) && channeling.value_or(false)) {
-							seconds *= 1.f - attributes->GetValue(Game::AttributeType::ChannelTimeDecrease);
-							seconds = std::max(0.05, seconds);
+							if (utils::enum_helper<Game::Descriptors>::test(descriptors, Game::Descriptors::IsChannel) && channeling.value_or(false)) {
+								seconds *= 1.f - attributes->GetValue(Game::AttributeType::ChannelTimeDecrease);
+								seconds = std::max(0.05, seconds);
+							}
 						}
 					}
 				}
-			}
 
-			if (seconds > 0) {
-				uint64_t time = utils::get_milliseconds() + static_cast<uint64_t>(seconds * 1000);
-				thread->set_resume_condition([time](lua_State* L, sol::variadic_results& results) { return utils::get_milliseconds() >= time; });
-			}
+				if (seconds > 0) {
+					const uint64_t time = Game::ThreadTiming::ResumeAt(wait, utils::get_milliseconds(), thread->start_ms(), seconds);
+					thread->set_resume_condition([time](lua_State* L, sol::variadic_results& results) { return utils::get_milliseconds() >= time; });
+				}
 
-			YieldThread(thread);
-		});
-
-		thread["WaitUntilTime"] = thread["WaitForXSeconds"];
+				YieldThread(thread);
+			});
+		};
+		thread["WaitForXSeconds"] = waitFor(Game::ThreadTiming::Wait::ForSeconds);
+		thread["WaitUntilTime"] = waitFor(Game::ThreadTiming::Wait::UntilTime);
 		thread["WaitForFadeOutInXSeconds"] = thread["WaitForXSeconds"];
 		thread["WaitForJumpComplete"] = sol::yielding([this](sol::this_state L, sol::variadic_args) {
 			if (auto t = GetThread(L)) {

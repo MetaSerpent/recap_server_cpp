@@ -213,5 +213,19 @@ class Session10Contracts(unittest.TestCase):
         self.assertIn("Game::CastQueue::Describe(result)", squad)
 
 
+class Session11Contracts(unittest.TestCase):
+    def test_wait_until_time_counts_from_the_script_start(self):
+        # Session 11: melee swings stayed busy for seconds and hit late because
+        # WaitUntilTime was an alias of WaitForXSeconds.
+        self.assertNotIn('thread["WaitUntilTime"] = thread["WaitForXSeconds"];', LUA_FN)
+        self.assertIn('thread["WaitUntilTime"] = waitFor(Game::ThreadTiming::Wait::UntilTime);', LUA_FN)
+        self.assertIn('thread["WaitForXSeconds"] = waitFor(Game::ThreadTiming::Wait::ForSeconds);', LUA_FN)
+        self.assertIn("Game::ThreadTiming::ResumeAt(wait, utils::get_milliseconds(), thread->start_ms(), seconds)", LUA_FN)
+        create = LUA_CPP.split("void LuaThread::create(", 1)[1].split("void LuaThread::post_call(", 1)[0]
+        self.assertIn("mStartMs = utils::get_milliseconds();", create)
+        test = (ROOT / "tests/combat_presentation_test.cpp").read_text(encoding="utf-8")
+        self.assertIn('#include "../darkspore_server/source/game/thread_timing.h"', test)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -75,6 +75,9 @@ namespace Game {
 			void set_owner_object(const ObjectPtr& object) { mOwnerObject = object; }
 			const ObjectPtr& get_owner_object() const { return mOwnerObject; }
 
+			// When the current script started (nThread.WaitUntilTime counts from it).
+			uint64_t start_ms() const { return mStartMs; }
+
 		private:
 			void create(const sol::function& func);
 			void post_call();
@@ -89,6 +92,7 @@ namespace Game {
 
 			sol::thread mThread;
 			sol::coroutine mCoroutine;
+			uint64_t mStartMs = 0;
 			sol::environment mEnvironment;
 
 			friend class Lua;
