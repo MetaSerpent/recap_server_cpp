@@ -20,7 +20,9 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04 (GCC 15.2), which rejects sol2 3.3.1's
+    # optional<T&>::emplace [-Wtemplate-body]. 24.04 has GCC 13.3, as local checks.
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
