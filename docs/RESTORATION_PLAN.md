@@ -702,3 +702,32 @@ dropped them (startup log: "unknown to the server"), so scripts read 0 and
 could not set them, and the client no longer received them. Aliased; checked
 locally against the installed build-103 table: 114 of 115 entries resolve
 (`Primary` is -1, not an attribute), 110 attributes reflected.
+
+### Twelfth client session on `a0300ea` (2026-11-13): no visible progress
+
+Player report: no improvement; the hero spawns away from the usual deploy
+point; the player's name shows as "Unknown". Log: 82 casts, 129 responses
+(about 47 accepted, 35 refused), 52 animations, 13 hits, 0 kills, 3 hero
+deploys, no Lua errors. Refusals: basic attack superseded 8, busy after the
+2 s retry window 3; specials index 2/3 busy 5, unavailable 1; squad index 6/7
+busy 15, unavailable 2. Startup: attribute map resolves every game name
+except `Primary` (-1).
+
+Open for the next session, in this order:
+1. **Spawn point and "Unknown" name** (new report; not yet known whether they
+   started with `f54ae2b`/`a0300ea` or earlier). The log has neither positions
+   nor names: log the deploy position sent (PlayerCharacterDeploy / ObjectCreate
+   / teleport) against the level's spawn markers, and the name fields sent in
+   LabsPlayer/game join. Candidate from `f54ae2b`: `Attributes::WriteTo` now
+   writes slots 99-110 contiguously up to 0x428 (upstream left 0x3F8-0x3FF
+   untouched and started its second region at 0x400); check that blob first.
+2. **Heroes still busy past their swing** after the `WaitUntilTime` fix: find
+   which wait or resume condition keeps the thread alive (log the pending
+   resume reason when a cast is refused as busy).
+3. **Squad abilities refused while the hero swings:** they share the hero's Lua
+   thread; check how build 103 runs squad abilities (separate thread or queue).
+4. **Few hits per swing:** log target id and hit result per melee swing.
+5. To stop finding one engine gap per playtest: a headless harness that runs
+   every ability script's tick against the bindings with a fake caster and
+   target, and reports scripts that error, never finish, or never call
+   TakeDamage.
