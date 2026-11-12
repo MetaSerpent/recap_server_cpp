@@ -104,7 +104,7 @@ class CastResponseContracts(unittest.TestCase):
         self.assertNotIn("//SendActionCommandResponse(client, actionResponse);", SERVER)
 
     def test_squad_casts_use_the_build_103_responses(self):
-        self.assertIn("StartAbilityCast(client, object, command, abilityId) != Game::CastResult::Started", self.squad)
+        self.assertIn("StartAbilityCast(client, object, command, abilityId); result != Game::CastResult::Started", self.squad)
         self.assertEqual(self.squad.count("reject();"), 3)
         for body in (self.squad, self.start, self.handler):
             self.assertNotIn("AbilityCommandResponse response", body)
@@ -193,6 +193,24 @@ class HeroStatsAndTimeContracts(unittest.TestCase):
         self.assertIn("return mGame.GetLuaFrameSeconds();", LUA_FN)
         inst = (SRC / "game/instance.cpp").read_text(encoding="utf-8")
         self.assertIn("mLuaFrameSeconds = static_cast<float>(delta) / 1000.f;", inst)
+
+
+class Session10Contracts(unittest.TestCase):
+    def test_transform_vector_accepts_the_game_float_form(self):
+        # 7 scripts call TransformVector(x, y, z, GetOrientation(obj)); the
+        # vec3/quat-only binding raised in template_ability_projectile.lua.
+        self.assertIn("&LuaFunction::nMathUtil::TransformVectorFloats", LUA_FN)
+        self.assertNotIn("return v * glm::eulerAngles(q);", LUA_FN)
+        self.assertEqual(LUA_FN.count("Game::OrientationMath::Rotate("), 2)
+        test = (ROOT / "tests/combat_presentation_test.cpp").read_text(encoding="utf-8")
+        self.assertIn('#include "../darkspore_server/source/game/orientation_math.h"', test)
+
+    def test_refused_casts_are_logged_with_a_reason(self):
+        handler = SERVER.split("void Server::HandleCharacterAbility(", 1)[1].split("void Server::ScheduleBasicAttackRetry(", 1)[0]
+        squad = SERVER.split("case ActionCommand::UseSquadAbility:", 1)[1].split("// Catalyst pickup", 1)[0]
+        self.assertIn("Game::CastQueue::Describe(result)", handler)
+        self.assertIn("superseded by a newer held attack", handler)
+        self.assertIn("Game::CastQueue::Describe(result)", squad)
 
 
 if __name__ == "__main__":

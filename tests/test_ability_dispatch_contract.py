@@ -22,7 +22,7 @@ class AbilityDispatchContractTests(unittest.TestCase):
 
     def test_squad_does_not_ack_failed_execution(self):
         handler = NETWORK.split("// Squad ability", 1)[1].split("// Catalyst pickup", 1)[0]
-        self.assertIn("if (StartAbilityCast(client, object, command, abilityId) != Game::CastResult::Started) {", handler)
+        self.assertIn("const auto result = StartAbilityCast(client, object, command, abilityId); result != Game::CastResult::Started) {", handler)
         # StartAbilityCast sends Accepted only after the Lua script started
         start = NETWORK.split("Game::CastResult Server::StartAbilityCast(", 1)[1].split("void Server::HandleCharacterAbility(", 1)[0]
         self.assertIn("if (result != Game::CastResult::Started) {\n\t\t\treturn result;", start)

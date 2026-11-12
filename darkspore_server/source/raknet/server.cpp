@@ -800,6 +800,7 @@ namespace RakNet {
 			// Latest held attack wins; it starts when the hero is free.
 			if (const auto [pending, inserted] = mPendingBasicAttacks.try_emplace(player->GetId(), command); !inserted) {
 				// Superseded by the newer one: answer it so the client never waits on it.
+				std::cout << "Cast refused: index 0 (superseded by a newer held attack)" << std::endl;
 				SendActionCommandResponse(client, ActionResponse::Reject(pending->second.data.unk[0], pending->second.data.objectId));
 				pending->second = command;
 			}
@@ -808,6 +809,9 @@ namespace RakNet {
 			}
 			return;
 		}
+		// One line per refused cast: which ability and why (diagnoses runs of rejections).
+		std::cout << "Cast refused: index " << command.ability.index << " ability 0x" << std::hex << abilityId << std::dec
+		          << " (" << Game::CastQueue::Describe(result) << (attempt > 0 ? ", after retries" : "") << ")" << std::endl;
 		rejectCast();
 	}
 
@@ -949,7 +953,9 @@ namespace RakNet {
 				object->SetOrientation(command.data.orientation);
 				// Same build-103 responses as hero abilities (56-byte ActionCommandResponse);
 				// the old upstream AbilityCommandResponse layout sent here does not match it.
-				if (StartAbilityCast(client, object, command, abilityId) != Game::CastResult::Started) {
+				if (const auto result = StartAbilityCast(client, object, command, abilityId); result != Game::CastResult::Started) {
+					std::cout << "Cast refused: squad index " << command.ability.index << " ability 0x" << std::hex << abilityId << std::dec
+					          << " (" << Game::CastQueue::Describe(result) << ")" << std::endl;
 					reject();
 				}
 				break;

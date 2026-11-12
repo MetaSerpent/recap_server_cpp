@@ -32,6 +32,17 @@ namespace Game {
 		constexpr bool ShouldRetry(CastResult result, uint32_t attempt) noexcept {
 			return result == CastResult::Busy && attempt < MaxRetries;
 		}
+
+		// Reason written to the server log for a refused cast.
+		constexpr const char* Describe(CastResult result) noexcept {
+			switch (result) {
+				case CastResult::Started: return "started";
+				case CastResult::Busy: return "busy";
+				case CastResult::OnCooldown: return "on cooldown";
+				case CastResult::Unavailable: return "unavailable";
+			}
+			return "unknown";
+		}
 	}
 }
 

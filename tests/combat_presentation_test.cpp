@@ -3,6 +3,7 @@
 #include "../darkspore_server/source/game/animation_sequence.h"
 #include "../darkspore_server/source/game/attribute_modifier_registry.h"
 #include "../darkspore_server/source/game/hero_stats.h"
+#include "../darkspore_server/source/game/orientation_math.h"
 
 #include <cassert>
 #include <cstdint>
@@ -47,6 +48,24 @@ namespace {
 	static_assert(Game::HeroStats::WeaponDamage(0.f, 0.f) == Game::HeroStats::FallbackWeaponDamage);
 	static_assert(Game::HeroStats::WeaponDamage(12.f, 6.f) == Game::HeroStats::FallbackWeaponDamage);
 	static_assert(Game::HeroStats::WeaponDamage(-1.f, 6.f) == Game::HeroStats::FallbackWeaponDamage);
+
+	// nMathUtil.TransformVector(x, y, z, qx, qy, qz, qw): rotation by the
+	// orientation GetOrientation returns (x, y, z, w).
+	using Game::OrientationMath::Rotate;
+	using Game::OrientationMath::Vec3;
+	constexpr bool Near(const Vec3& a, const Vec3& b) {
+		for (int i = 0; i < 3; ++i) {
+			const float d = a[i] - b[i];
+			if (d > 1e-5f || d < -1e-5f) { return false; }
+		}
+		return true;
+	}
+	constexpr float kHalfSqrt2 = 0.70710678f;
+	static_assert(Near(Rotate({ 1.f, 2.f, 3.f }, 0.f, 0.f, 0.f, 1.f), { 1.f, 2.f, 3.f }));             // identity
+	static_assert(Near(Rotate({ 1.f, 0.f, 0.f }, 0.f, 0.f, kHalfSqrt2, kHalfSqrt2), { 0.f, 1.f, 0.f }));  // 90 deg about z
+	static_assert(Near(Rotate({ 1.f, 0.f, 0.f }, 0.f, 1.f, 0.f, 0.f), { -1.f, 0.f, 0.f }));             // 180 deg about y
+	static_assert(Near(Rotate({ 0.f, 1.f, 0.f }, kHalfSqrt2, 0.f, 0.f, kHalfSqrt2), { 0.f, 0.f, 1.f }));  // 90 deg about x
+	static_assert(Near(Rotate({ 4.f, 5.f, 6.f }, 0.f, 0.f, 0.f, 0.f), { 4.f, 5.f, 6.f }));             // zero quaternion
 }
 
 int main() {
@@ -66,6 +85,9 @@ int main() {
 
 	assert(registry.Remove(second));
 	assert(registry.Size() == 0);
+
+	// A non-unit orientation is normalised first (same result as the unit one).
+	assert(Near(Rotate({ 1.f, 0.f, 0.f }, 0.f, 0.f, 2.f * kHalfSqrt2, 2.f * kHalfSqrt2), { 0.f, 1.f, 0.f }));
 
 	std::cout << "combat_presentation_test: all checks passed\n";
 	return 0;

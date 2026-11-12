@@ -4,6 +4,7 @@
 #include "ability_registration.h"
 #include "combat_call.h"
 #include "lua_type_filter.h"
+#include "orientation_math.h"
 #include "team_validation.h"
 
 #include "instance.h"
@@ -226,8 +227,16 @@ namespace {
 namespace LuaFunction {
 	// nMathUtil
 	namespace nMathUtil {
-		auto TransformVector(const glm::vec3& v, const glm::quat& q) {
-			return v * glm::eulerAngles(q);
+		// Rotates v by the orientation (was v * eulerAngles(q), not a rotation).
+		glm::vec3 TransformVector(const glm::vec3& v, const glm::quat& q) {
+			const auto r = Game::OrientationMath::Rotate({ v.x, v.y, v.z }, q.x, q.y, q.z, q.w);
+			return { r[0], r[1], r[2] };
+		}
+
+		// Game form: TransformVector(x, y, z, GetOrientation(object)) -> x, y, z.
+		std::tuple<float, float, float> TransformVectorFloats(float vx, float vy, float vz, float qx, float qy, float qz, float qw) {
+			const auto r = Game::OrientationMath::Rotate({ vx, vy, vz }, qx, qy, qz, qw);
+			return { r[0], r[1], r[2] };
 		}
 
 		auto RotateVectorByAxisAngle(const glm::vec3& v, const glm::vec3& axis, float angle) {
@@ -1439,7 +1448,10 @@ namespace Game {
 
 	void LuaBase::RegisterMath() {
 		auto mathUtil = mState.create_named_table("nMathUtil");
-		mathUtil["TransformVector"] = &LuaFunction::nMathUtil::TransformVector;
+		mathUtil["TransformVector"] = sol::overload(
+			&LuaFunction::nMathUtil::TransformVector,
+			&LuaFunction::nMathUtil::TransformVectorFloats
+		);
 		mathUtil["RotateVectorByAxisAngle"] = sol::overload(
 			&LuaFunction::nMathUtil::RotateVectorByAxisAngle,
 			&LuaFunction::nMathUtil::RotateVectorByAxisAngleFloats
