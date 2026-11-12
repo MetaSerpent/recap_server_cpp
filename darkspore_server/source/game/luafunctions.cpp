@@ -3,6 +3,7 @@
 #include "lua.h"
 #include "ability_registration.h"
 #include "combat_call.h"
+#include "attribute_layout.h"
 #include "lua_type_filter.h"
 #include "orientation_math.h"
 #include "team_validation.h"
@@ -2537,7 +2538,13 @@ namespace Game {
 		// nAttribute
 		{
 			auto nAttribute = mState["nAttribute"].get_or_create<sol::table>();
-			nAttribute["GetAttributeValue"] = [this](sol::object objOrSnap, uint8_t attrIdx) -> float {
+			// Scripts pass the game's attribute numbers (nAttributeType); the
+			// server stores AttributeType values (game/attribute_layout.h).
+			nAttribute["GetAttributeValue"] = [this](sol::object objOrSnap, uint8_t scriptIdx) -> float {
+				const auto attrIdx = Game::AttributeLayout::Active().ToServer(scriptIdx);
+				if (attrIdx == Game::AttributeLayout::None) {
+					return 0.f;
+				}
 				if (objOrSnap.is<Game::AttributesPtr>()) {
 					if (const auto& attr = objOrSnap.as<Game::AttributesPtr>()) {
 						return attr->GetValue(attrIdx);
@@ -2565,7 +2572,11 @@ namespace Game {
 			nAttribute["CreateAttributeSnapshot_FromObject"] = &LuaFunction::Object::GetAttributeSnapshot;
 			// handle = AddAttributeModifier(object, attributeType, value);
 			// RemoveAttributeModifier(handle) undoes exactly that change.
-			nAttribute["AddAttributeModifier"] = [this](sol::object objVal, uint8_t attrIdx, float delta) -> uint32_t {
+			nAttribute["AddAttributeModifier"] = [this](sol::object objVal, uint8_t scriptIdx, float delta) -> uint32_t {
+				const auto attrIdx = Game::AttributeLayout::Active().ToServer(scriptIdx);
+				if (attrIdx == Game::AttributeLayout::None) {
+					return 0u; // no such attribute: no handle, nothing to undo
+				}
 				if (auto obj = LuaGetObject(mGame.GetObjectManager(), objVal)) {
 					obj->SetAttributeValue(attrIdx, obj->GetAttributeValue(attrIdx) + delta);
 					return mAttributeModifiers.Add(obj->GetId(), attrIdx, delta);
@@ -2580,8 +2591,10 @@ namespace Game {
 					sol::object delta = LuaArg(args, 2);
 					if (attr.get_type() == sol::type::number && delta.get_type() == sol::type::number) {
 						if (auto obj = LuaGetObject(mGame.GetObjectManager(), objVal)) {
-							const auto attrIdx = attr.as<uint8_t>();
-							obj->SetAttributeValue(attrIdx, obj->GetAttributeValue(attrIdx) - delta.as<float>());
+							const auto attrIdx = Game::AttributeLayout::Active().ToServer(attr.as<uint8_t>());
+							if (attrIdx != Game::AttributeLayout::None) {
+								obj->SetAttributeValue(attrIdx, obj->GetAttributeValue(attrIdx) - delta.as<float>());
+							}
 						}
 					}
 					return;
@@ -3473,8 +3486,16 @@ namespace Game {
 
 	void Lua::RegisterAttributes() {
 		auto attributes = mState.new_usertype<Game::Attributes>("Attributes", sol::no_constructor);
-		attributes["GetValue"] = sol::resolve<float(uint8_t) const>(&Game::Attributes::GetValue);
-		attributes["SetValue"] = sol::resolve<void(uint8_t, float)>(&Game::Attributes::SetValue);
+		// Script attribute numbers -> AttributeType (game/attribute_layout.h).
+		attributes["GetValue"] = [](const Game::Attributes& self, uint8_t scriptIdx) -> float {
+			const auto idx = Game::AttributeLayout::Active().ToServer(scriptIdx);
+			return idx == Game::AttributeLayout::None ? 0.f : self.GetValue(idx);
+		};
+		attributes["SetValue"] = [](Game::Attributes& self, uint8_t scriptIdx, float value) {
+			if (const auto idx = Game::AttributeLayout::Active().ToServer(scriptIdx); idx != Game::AttributeLayout::None) {
+				self.SetValue(idx, value);
+			}
+		};
 
 		attributes["GetOwnerObject"] = &Game::Attributes::GetOwnerObject;
 	}
@@ -3541,8 +3562,15 @@ namespace Game {
 		object["GetAttributeSnapshot"] = &LuaFunction::Object::GetAttributeSnapshot;
 		object["SetAttributeSnapshot"] = &LuaFunction::Object::SetAttributeSnapshot;
 
-		object["GetAttributeValue"] = sol::resolve<float(uint8_t) const>(&Object::GetAttributeValue);
-		object["SetAttributeValue"] = sol::resolve<void(uint8_t, float)>(&Object::SetAttributeValue);
+		object["GetAttributeValue"] = [](const Object& self, uint8_t scriptIdx) -> float {
+			const auto idx = Game::AttributeLayout::Active().ToServer(scriptIdx);
+			return idx == Game::AttributeLayout::None ? 0.f : self.GetAttributeValue(idx);
+		};
+		object["SetAttributeValue"] = [](Object& self, uint8_t scriptIdx, float value) {
+			if (const auto idx = Game::AttributeLayout::Active().ToServer(scriptIdx); idx != Game::AttributeLayout::None) {
+				self.SetAttributeValue(idx, value);
+			}
+		};
 
 		object["GetWeaponDamage"] = &LuaFunction::Object::GetWeaponDamage;
 
@@ -3755,8 +3783,9 @@ namespace Game {
 			}
 			return sol::make_object(L, 0.f);
 		};
-		nAbility["GetAbilityAttributeValue"] = [this](sol::this_state L, uint8_t attrIdx) -> float {
-			if (auto ab = LuaGetAbility(L); ab && ab->GetActiveAgent()) {
+		nAbility["GetAbilityAttributeValue"] = [this](sol::this_state L, uint8_t scriptIdx) -> float {
+			const auto attrIdx = Game::AttributeLayout::Active().ToServer(scriptIdx);
+			if (auto ab = LuaGetAbility(L); ab && ab->GetActiveAgent() && attrIdx != Game::AttributeLayout::None) {
 				return ab->GetActiveAgent()->GetAttributeValue(attrIdx);
 			}
 			return 0.f;

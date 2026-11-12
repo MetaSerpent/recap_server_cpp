@@ -1,6 +1,7 @@
 
 // Include
 #include "character.h"
+#include "attribute_layout.h"
 
 #include "raknet/types.h"
 
@@ -170,19 +171,24 @@ namespace Game {
 			if (mDataBits.test(12)) { reflector.write<12>(mGearScoreFlattened); }
 		}
 
+		// Part attribute fields follow the game's attribute numbering (the
+		// native layout in WriteTo above already does; game/attribute_layout.h).
 		constexpr uint8_t attributeFieldOffset = 13;
+		const auto& layout = AttributeLayout::Active();
 		const auto& attrData = mPartAttributes.GetData();
 		if (!attrData.empty()) {
 			const auto& attrDataBits = mPartAttributes.GetDataBits();
 			for (const auto& [idx, value] : attrData) {
-				if (attrDataBits.test(idx)) {
-					reflector.write(attributeFieldOffset + idx, value);
+				if (attrDataBits.test(idx) && layout.IsReflected(idx)) {
+					reflector.write(attributeFieldOffset + layout.ToGame(idx), value);
 				}
 			}
 		}
 
 		for (const auto& idx : mPartAttributes.GetErasedData()) {
-			reflector.write(attributeFieldOffset + idx, 0.f);
+			if (layout.IsReflected(idx)) {
+				reflector.write(attributeFieldOffset + layout.ToGame(idx), 0.f);
+			}
 		}
 
 		reflector.end();

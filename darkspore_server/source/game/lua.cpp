@@ -4,6 +4,7 @@
 #include "lua51_transpiler.h"
 #include "lua_thread_state.h"
 #include "animation_sequence.h"
+#include "attribute_layout.h"
 
 #include "instance.h"
 #include "objectmanager.h"
@@ -1998,7 +1999,40 @@ for _, module in ipairs({ "Lua!AttributeUtils.lua", "Lua!NavigationUtils.lua" })
 	local ok, err = pcall(require, module)
 	if not ok then print("Lua preload failed for " .. module .. ": " .. tostring(err)) end
 end
+pcall(require, "Lua!GlobalDefinitions.lua")
 )");
+
+		// Attribute numbering of the installed game: scripts pass
+		// nAttributeType values and the client reads attributes by them
+		// (game/attribute_layout.h). Without the table the server keeps its own.
+		std::vector<std::pair<std::string, int>> gameAttributes;
+		if (sol::optional<sol::table> table = mState["nAttributeType"]; table) {
+			for (const auto& [key, value] : *table) {
+				if (key.get_type() == sol::type::string && value.get_type() == sol::type::number) {
+					gameAttributes.emplace_back(key.as<std::string>(), static_cast<int>(value.as<double>()));
+				}
+			}
+		}
+		if (gameAttributes.empty()) {
+			std::cout << "Attributes: game scripts define no nAttributeType; using the server's numbering." << std::endl;
+		} else {
+			const auto layout = Game::AttributeLayout::Map::FromGameNames(gameAttributes);
+			if (Game::AttributeLayout::SetActiveOnce(layout)) {
+				size_t renumbered = 0;
+				std::string unknown;
+				for (const auto& [name, index] : gameAttributes) {
+					const auto server = Game::AttributeLayout::ServerIndex(name);
+					if (server == Game::AttributeLayout::None) {
+						unknown += (unknown.empty() ? "" : ", ") + name;
+					} else if (server != index) {
+						++renumbered;
+					}
+				}
+				std::cout << "Attributes: " << gameAttributes.size() << " from the game's nAttributeType, "
+				          << renumbered << " numbered differently from the server"
+				          << (unknown.empty() ? "" : "; unknown to the server: " + unknown) << std::endl;
+			}
+		}
 	}
 
 	void Lua::Reload() {

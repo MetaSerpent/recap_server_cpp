@@ -102,6 +102,10 @@ jobs:
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/action_response_test.cpp -o /tmp/action_response_test
           /tmp/action_response_test
+      - name: Attribute numbering follows the installed game
+        run: |
+          g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/attribute_layout_test.cpp -o /tmp/attribute_layout_test
+          /tmp/attribute_layout_test
       - name: Squads reference owned creatures, not templates
         run: |
           g++ -std=c++23 -Wall -Wextra -Werror -pedantic tests/squad_repair_test.cpp -o /tmp/squad_repair_test

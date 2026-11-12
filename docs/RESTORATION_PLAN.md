@@ -639,3 +639,41 @@ min/max weapon damage at 111/112 (its sample hero sends `109: 1, 111: 1,
 installed game's own `nAttributeType` table, keep weapon damage at 111/112,
 store server-only attributes without reflecting them; tests with a synthetic
 table (no game script in the repo).
+
+### Attribute numbering follows the installed game (implemented, not yet client-tested)
+
+`game/attribute_layout.h` maps the server's `AttributeType` to the game's
+numbering by name. At startup `Lua::Initialize` requires
+`Lua!GlobalDefinitions.lua`, reads the game's `nAttributeType` and sets the
+process-wide map once (logged: `Attributes: N from the game's nAttributeType,
+M numbered differently from the server`). Without that table the map is the
+identity, i.e. the previous behaviour, so other client versions are unchanged
+unless their own scripts say otherwise.
+- Lua boundary: the 8 bindings that take an attribute index from a script
+  (`nAttribute.GetAttributeValue`/`_FromSnapshot`, `AddAttributeModifier`,
+  `RemoveAttributeModifier` explicit form, `nAbility.GetAbilityAttributeValue`,
+  the `Attributes` and `Object` usertype accessors) translate the game index;
+  an index the game does not name reads 0 and writes nothing.
+- Storage: `Attributes::SetValue` stores every server attribute (it dropped
+  everything from `ClientCount`, so `BodyScale`, `DistributeDamageAmongSquad`,
+  `DefenseBoostPhysicalDamage`, `ImmuneToTaunted` read 0). Also fixed: setting
+  an absent attribute to 0 and then to a value erased `mErasedData.end()`
+  (undefined behaviour).
+- Client boundary: reflected attribute fields and the object layout slots use
+  the game's index; fields 111/112 stay min/max weapon damage; attributes whose
+  game index is 111 or above (`XPBoost`, `InvisibleToSecurityTeleporters`,
+  `BodyScale`, `DefenseBoostPhysicalDamage`) are not reflected (no evidence of a
+  field below the weapon damage ones; darkspin sends `BodyScale` at 113, left
+  for a client-verified follow-up). Upstream's hand-written `Character::WriteTo`
+  layout already used this numbering (slot 74 and 76 skipped, `ImmuneToSleep`
+  at 75, server 98-110 at 101-113), which confirms the client order; its
+  reflection did not and now does. The object layout writes slots 0-110
+  contiguously from 0x26C (slot 101 at 0x400, as in `Character`); the old
+  second loop ran while `i < mData.size()` and almost never wrote.
+
+Tests: `tests/attribute_layout_test.cpp` (synthetic table: renumbering,
+unnamed index 74, unknown names, out-of-range index, reflection limits,
+identity default, set-once), `tests/test_attribute_layout_contract.py` (name
+table equals the enum order, boundaries translate, storage, startup). Needs:
+server log line at startup, then a client session (immunities, body scale,
+squad damage sharing).

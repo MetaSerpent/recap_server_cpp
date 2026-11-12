@@ -332,7 +332,7 @@ namespace Game {
 
 			std::vector<std::tuple<uint8_t, float>> mData;
 			std::vector<uint8_t> mErasedData;
-			std::bitset<sClientVisibleAttributeCount> mDataBits;
+			std::bitset<static_cast<std::size_t>(AttributeType::Count)> mDataBits;
 
 			float mMinWeaponDamage = 0;
 			float mMaxWeaponDamage = 0;
