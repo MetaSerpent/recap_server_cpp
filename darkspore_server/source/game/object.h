@@ -360,6 +360,10 @@ namespace Game {
 			const glm::quat& GetOrientation() const;
 			void SetOrientation(const glm::quat& orientation);
 
+			// Direction set when the hero starts a cast (game/cast_facing.h); zero if none.
+			const glm::vec3& GetCombatFacing() const { return mCombatFacing; }
+			void SetCombatFacing(const glm::vec3& facing) { mCombatFacing = facing; }
+
 			const glm::vec3& GetLinearVelocity() const;
 			void SetLinearVelocity(const glm::vec3& velocity);
 
@@ -554,6 +558,7 @@ namespace Game {
 
 			// mostly reflection for now
 			glm::quat mOrientation {};
+			glm::vec3 mCombatFacing {};
 			glm::vec3 mLinearVelocity {};
 			glm::vec3 mAngularVelocity {};
 

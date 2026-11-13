@@ -5,6 +5,9 @@
 #include "../darkspore_server/source/game/hero_stats.h"
 #include "../darkspore_server/source/game/orientation_math.h"
 #include "../darkspore_server/source/game/thread_timing.h"
+#include "../darkspore_server/source/game/cast_facing.h"
+#include "../darkspore_server/source/game/entry_position.h"
+#include <vector>
 
 #include <cassert>
 #include <cstdint>
@@ -102,6 +105,29 @@ int main() {
 
 	// A non-unit orientation is normalised first (same result as the unit one).
 	assert(Near(Rotate({ 1.f, 0.f, 0.f }, 0.f, 0.f, 2.f * kHalfSqrt2, 2.f * kHalfSqrt2), { 0.f, 1.f, 0.f }));
+
+	// A hero faces what it attacks: target object, else target point, else cursor.
+	{
+		using Game::CastFacing::Aim;
+		using Game::CastFacing::Vec2;
+		const auto near1 = [](const std::optional<Vec2>& v, float x, float y) { return v && std::fabs(v->x - x) < 1e-5f && std::fabs(v->y - y) < 1e-5f; };
+		assert(near1(Aim({ 0.f, 0.f }, Vec2 { 0.f, -4.f }, { 9.f, 9.f }, { 9.f, 9.f }), 0.f, -1.f));   // enemy behind: not world +X
+		assert(near1(Aim({ 1.f, 1.f }, std::nullopt, { 1.f, 3.f }, { 5.f, 1.f }), 0.f, 1.f));          // no target: target point
+		assert(near1(Aim({ 1.f, 1.f }, Vec2 { 1.f, 1.f }, { 1.f, 1.f }, { -2.f, 1.f }), -1.f, 0.f));   // degenerate: cursor
+		assert(!Aim({ 1.f, 1.f }, std::nullopt, { 1.f, 1.f }, { 1.f, 1.f }));                          // nothing to face
+	}
+	// Entry position: slot marker, else first marker offset per slot, never the origin.
+	{
+		using namespace Game::EntryPosition;
+		const std::vector<Vec3> one { { 10.f, 20.f, 1.f } };
+		const std::vector<Vec3> two { { 10.f, 20.f, 1.f }, { 30.f, 40.f, 2.f } };
+		const std::vector<Vec3> none;
+		assert((Select("level_a", two, 1) == Vec3 { 30.f, 40.f, 2.f }));
+		assert((Select("level_a", one, 1) == Vec3 { 13.f, 20.f, 1.f }));
+		assert((Select("level_a", one, 0) == Vec3 { 10.f, 20.f, 1.f }));
+		assert((Select("Zelems_1", two, 0) == Zelems1));
+		assert((Select("level_a", none, 0) == Zelems1));
+	}
 
 	std::cout << "combat_presentation_test: all checks passed\n";
 	return 0;

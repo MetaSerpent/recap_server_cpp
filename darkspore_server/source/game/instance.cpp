@@ -1,6 +1,7 @@
 
 // Include
 #include "instance.h"
+#include "entry_position.h"
 
 #include "objectmanager.h"
 #include "lua.h"
@@ -676,10 +677,16 @@ namespace Game {
 		}
 
 		// Create creatures
-		glm::vec3 spawnpoint;
-		if (player->GetId() < mPlayerSpawnpoints.size()) {
-			spawnpoint = mPlayerSpawnpoints[player->GetId()];
+		std::vector<EntryPosition::Vec3> entryMarkers;
+		for (const auto& marker : mPlayerSpawnpoints) {
+			entryMarkers.push_back({ marker.x, marker.y, marker.z });
 		}
+		const std::string entryLevel = mChainData.GetName().data();
+		const auto entry = EntryPosition::Select(entryLevel, entryMarkers, player->GetId());
+		const glm::vec3 spawnpoint(entry[0], entry[1], entry[2]);
+		std::cout << "Entry: level " << entryLevel << ", player slot " << static_cast<int>(player->GetId())
+		          << ", " << entryMarkers.size() << " spawn markers -> (" << spawnpoint.x << ", " << spawnpoint.y << ", "
+		          << spawnpoint.z << ")" << std::endl;
 
 		// Force send character objects so the client can find them when swapping.
 		for (uint32_t i = 0; i < 3; ++i) {

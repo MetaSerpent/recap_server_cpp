@@ -225,6 +225,15 @@ namespace {
 	}
 }
 
+// Facing used by hit arcs and offsets: a player hero's cast direction, else
+// its locomotion facing (game/cast_facing.h).
+static glm::vec3 ObjectFacing(const Game::ObjectPtr& obj) {
+	if (obj->IsPlayerControlled() && glm::length2(obj->GetCombatFacing()) > 1e-6f) {
+		return obj->GetCombatFacing();
+	}
+	return obj->HasLocomotionData() ? obj->GetLocomotionData()->GetFacing() : glm::vec3(0.f);
+}
+
 // LuaFunction
 namespace LuaFunction {
 	// nMathUtil
@@ -851,8 +860,8 @@ namespace LuaFunction {
 		auto GetFacing(sol::this_state L, sol::object objectValue) {
 			auto& game = LuaGetGame(L);
 			auto object = LuaGetObject(game.GetObjectManager(), objectValue);
-			if (object && object->HasLocomotionData()) {
-				return object->GetLocomotionData()->GetFacing();
+			if (object) {
+				return ObjectFacing(object);
 			}
 			return glm::zero<glm::vec3>();
 		}
@@ -1987,7 +1996,7 @@ namespace Game {
 		};
 		gameObject["GetFacing"] = [this](sol::object objVal) -> std::tuple<float, float, float> {
 			if (auto obj = LuaGetObject(mGame.GetObjectManager(), objVal)) {
-				glm::vec3 f = obj->HasLocomotionData() ? obj->GetLocomotionData()->GetFacing() : glm::vec3(1.f, 0.f, 0.f);
+				glm::vec3 f = ObjectFacing(obj);
 				if (glm::length2(f) <= 1e-6f) {
 					f = glm::vec3(1.f, 0.f, 0.f);
 				}
@@ -1997,7 +2006,7 @@ namespace Game {
 		};
 		gameObject["GetRightDirection"] = [this](sol::object objVal) -> std::tuple<float, float, float> {
 			if (auto obj = LuaGetObject(mGame.GetObjectManager(), objVal)) {
-				glm::vec3 f = obj->HasLocomotionData() ? obj->GetLocomotionData()->GetFacing() : glm::vec3(1.f, 0.f, 0.f);
+				glm::vec3 f = ObjectFacing(obj);
 				if (glm::length2(f) <= 1e-6f) {
 					f = glm::vec3(1.f, 0.f, 0.f);
 				} else {

@@ -1,6 +1,7 @@
 
 // Include
 #include "server.h"
+#include "game/cast_facing.h"
 
 #include "sporenet/instance.h"
 #include "sporenet/user.h"
@@ -724,6 +725,22 @@ namespace RakNet {
 		combatData.unk[1] = command.ability.unk;
 		combatData.valueFromActionResponse = command.ability.userData;
 
+		// Face what is being attacked before the script builds its hit arc.
+		if (object->IsPlayerControlled()) {
+			using Game::CastFacing::Vec2;
+			const auto& position = object->GetPosition();
+			std::optional<Vec2> targetObject;
+			if (const auto& target = mGame.GetObjectManager().Get(command.ability.targetId); target && target != object) {
+				targetObject = Vec2 { target->GetPosition().x, target->GetPosition().y };
+			}
+			const auto aim = Game::CastFacing::Aim({ position.x, position.y }, targetObject,
+				{ command.ability.targetPosition.x, command.ability.targetPosition.y },
+				{ command.ability.cursorPosition.x, command.ability.cursorPosition.y });
+			if (aim) {
+				object->SetCombatFacing(glm::vec3(aim->x, aim->y, 0.f));
+			}
+		}
+
 		const auto result = mGame.UseAbility(object, combatData);
 		if (result != Game::CastResult::Started) {
 			return result;
@@ -930,6 +947,7 @@ namespace RakNet {
 			// Ability
 			case ActionCommand::UseCharacterAbility: {
 				Read<ActionCommandAbilityData>(mInStream, command.ability);
+				object->SetOrientation(command.data.orientation);
 				HandleCharacterAbility(client, player, object, command, 0);
 				break;
 			}
